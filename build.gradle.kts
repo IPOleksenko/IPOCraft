@@ -12,6 +12,7 @@ repositories {
 }
 
 dependencies {
+    implementation("org.json:json:20231013")
     implementation("com.google.code.gson:gson:2.8.9")  // Gson for working with JSON
     implementation("org.openjfx:javafx-controls:17")  // JavaFX for the UI
     testImplementation(platform("org.junit:junit-bom:5.10.0"))

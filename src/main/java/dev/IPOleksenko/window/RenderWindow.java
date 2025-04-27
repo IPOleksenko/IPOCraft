@@ -96,4 +96,10 @@ public class RenderWindow {
     public Pane getRoot() {
         return root;
     }
+
+    public void setMaximized(boolean maximized) {
+        if (primaryStage != null) {
+            primaryStage.setMaximized(maximized);
+        }
+    }
 }
