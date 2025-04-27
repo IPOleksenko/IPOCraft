@@ -8,9 +8,7 @@ import javafx.scene.control.ListView;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.List;
+import java.util.*;
 
 public class UserManager {
 
@@ -19,12 +17,14 @@ public class UserManager {
         public boolean minecraftAccount;
         public String login;
         public String password;
+        public String uuid;
 
-        public UserEntry(String username, boolean minecraftAccount, String login, String password) {
+        public UserEntry(String username, boolean minecraftAccount, String login, String password, String uuid) {
             this.username = username;
             this.minecraftAccount = minecraftAccount;
             this.login = login;
             this.password = password;
+            this.uuid = uuid;
         }
     }
 
@@ -43,17 +43,18 @@ public class UserManager {
     }
 
     public void addUser(String username, boolean minecraftAccount, String login, String password) {
-        UserEntry user = new UserEntry(username, minecraftAccount, login, password);
+        String newUuid = UUID.randomUUID().toString();
+        UserEntry user = new UserEntry(username, minecraftAccount, login, password, newUuid);
         users.add(user);
         listView.getItems().add(formatDisplayName(user));
         saveUsers();
     }
 
     public void deleteSelectedUser() {
-        int selectedIndex = listView.getSelectionModel().getSelectedIndex();
-        if (selectedIndex >= 0) {
-            users.remove(selectedIndex);
-            listView.getItems().remove(selectedIndex);
+        int idx = listView.getSelectionModel().getSelectedIndex();
+        if (idx >= 0) {
+            users.remove(idx);
+            listView.getItems().remove(idx);
             saveUsers();
         }
     }
@@ -66,15 +67,22 @@ public class UserManager {
     private void loadUsers() {
         try {
             if (Files.exists(savePath)) {
-                String json = new String(Files.readAllBytes(savePath));
+                String json = Files.readString(savePath);
                 Type listType = new TypeToken<List<UserEntry>>() {}.getType();
                 users = gson.fromJson(json, listType);
-                for (UserEntry user : users) {
-                    listView.getItems().add(formatDisplayName(user));
+
+                boolean changed = false;
+                for (UserEntry u : users) {
+                    if (u.uuid == null || u.uuid.isEmpty()) {
+                        u.uuid = UUID.randomUUID().toString();
+                        changed = true;
+                    }
+                    listView.getItems().add(formatDisplayName(u));
                 }
+                if (changed) saveUsers();
             }
         } catch (IOException e) {
-            System.out.println("Failed to load users: " + e.getMessage());
+            System.err.println("Failed to load users: " + e.getMessage());
         }
     }
 
@@ -82,14 +90,16 @@ public class UserManager {
         try {
             Files.createDirectories(savePath.getParent());
             String json = gson.toJson(users);
-            Files.write(savePath, json.getBytes());
+            Files.writeString(savePath, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
-            System.out.println("Failed to save users: " + e.getMessage());
+            System.err.println("Failed to save users: " + e.getMessage());
         }
     }
 
     private String formatDisplayName(UserEntry user) {
-        String displayName = (user.username != null && !user.username.isEmpty()) ? user.username : user.login;
+        String displayName = (user.minecraftAccount ?
+                (user.login != null ? user.login : "") :
+                (user.username != null ? user.username : ""));
         return displayName + (user.minecraftAccount ? " (Account)" : " (No Account)");
     }
 
@@ -98,6 +108,8 @@ public class UserManager {
     }
 
     public void updateUser(int index, UserEntry user) {
+        UserEntry old = users.get(index);
+        user.uuid = old.uuid;
         users.set(index, user);
         listView.getItems().set(index, formatDisplayName(user));
         saveUsers();

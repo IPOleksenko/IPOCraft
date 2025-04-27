@@ -67,6 +67,9 @@ public class VersionWindow {
                 return;
             }
 
+            // Replace spaces with underscores in custom version name
+            customName = customName.replaceAll("\\s+", "_");
+
             try {
                 Path versionFolder = Paths.get(MINECRAFT_VERSIONS_PATH, customName);
                 if (Files.exists(versionFolder)) {
