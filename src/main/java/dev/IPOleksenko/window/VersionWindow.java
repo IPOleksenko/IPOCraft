@@ -49,6 +49,12 @@ public class VersionWindow {
         List<VersionEntry> allVersions = fetchMinecraftVersions();
         updateList(versionList, allVersions, showRelease.isSelected(), showSnapshot.isSelected(), showOther.isSelected());
 
+        versionList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue != null) {
+                customNameField.setText(newValue);
+            }
+        });
+
         showRelease.setOnAction(e -> updateList(versionList, allVersions, showRelease.isSelected(), showSnapshot.isSelected(), showOther.isSelected()));
         showSnapshot.setOnAction(e -> updateList(versionList, allVersions, showRelease.isSelected(), showSnapshot.isSelected(), showOther.isSelected()));
         showOther.setOnAction(e -> updateList(versionList, allVersions, showRelease.isSelected(), showSnapshot.isSelected(), showOther.isSelected()));
@@ -67,7 +73,6 @@ public class VersionWindow {
                 return;
             }
 
-            // Replace spaces with underscores in custom version name
             customName = customName.replaceAll("\\s+", "_");
 
             try {

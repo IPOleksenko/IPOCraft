@@ -10,6 +10,8 @@ import dev.IPOleksenko.window.VersionWindow;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -24,7 +26,30 @@ public class Main extends Application {
 
         ListView<String> userListView = new ListView<>();
         userListView.setPrefSize(200, 400);
+        Label userPlaceholder = new Label("No profiles");
+        userPlaceholder.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+        userListView.setPlaceholder(userPlaceholder);
         UserManager userManager = new UserManager(userListView);
+
+        ListView<String> versionListView = new ListView<>();
+        versionListView.setPrefSize(200, 400);
+        Label versionPlaceholder = new Label("No versions");
+        versionPlaceholder.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+        versionListView.setPlaceholder(versionPlaceholder);
+        VersionManager versionManager = new VersionManager(versionListView);
+
+        userManager.loadUsers();
+        versionManager.loadVersions();
+
+        userListView.setCellFactory(lv -> new AlwaysSelectedListCell<>(userListView));
+        versionListView.setCellFactory(lv -> new AlwaysSelectedListCell<>(versionListView));
+
+        if (!userListView.getItems().isEmpty()) {
+            userListView.getSelectionModel().select(0);
+        }
+        if (!versionListView.getItems().isEmpty()) {
+            versionListView.getSelectionModel().select(0);
+        }
 
         Button addUser = new Button("+");
         addUser.setOnAction(e -> UserWindow.open(userManager));
@@ -40,10 +65,6 @@ public class Main extends Application {
         VBox userBox = new VBox(5, new HBox(5, addUser, deleteUser, editUser), userListView);
         userBox.setPadding(new Insets(10));
 
-        ListView<String> versionListView = new ListView<>();
-        versionListView.setPrefSize(200, 400);
-        VersionManager versionManager = new VersionManager(versionListView);
-
         Button addVersion = new Button("+");
         addVersion.setOnAction(e -> VersionWindow.open(versionManager));
         Button deleteVersion = new Button("-");
@@ -56,8 +77,13 @@ public class Main extends Application {
         playButton.setOnAction(e -> {
             int userIndex = userListView.getSelectionModel().getSelectedIndex();
             int versionIndex = versionListView.getSelectionModel().getSelectedIndex();
+
             if (userIndex < 0 || versionIndex < 0) {
-                System.out.println("Please select a user and a version.");
+                new javafx.scene.control.Alert(
+                        javafx.scene.control.Alert.AlertType.WARNING,
+                        "Please select a user and a version.",
+                        javafx.scene.control.ButtonType.OK
+                ).showAndWait();
                 return;
             }
 
@@ -73,16 +99,46 @@ public class Main extends Application {
             }
         });
 
-        HBox mainBox = new HBox(50, userBox, versionBox);
+        VBox playBox = new VBox(playButton);
+        playBox.setPadding(new Insets(10));
+        playBox.setStyle("-fx-alignment: center;");
+
+        HBox mainBox = new HBox(50, userBox, versionBox, playBox);
         mainBox.setPadding(new Insets(10));
-        VBox root = new VBox(20, mainBox, playButton);
+
+        VBox root = new VBox(mainBox);
         root.setPadding(new Insets(10));
 
-        renderWindow.getRoot().getChildren().add(root);
-        renderWindow.setMaximized(true);
+        renderWindow.getContentPane().getChildren().add(root);
     }
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    private static class AlwaysSelectedListCell<T> extends ListCell<T> {
+        private final ListView<T> listView;
+
+        public AlwaysSelectedListCell(ListView<T> listView) {
+            this.listView = listView;
+        }
+
+        @Override
+        protected void updateItem(T item, boolean empty) {
+            super.updateItem(item, empty);
+
+            if (empty || item == null) {
+                setText(null);
+                setStyle("");
+            } else {
+                setText(item.toString());
+
+                if (isSelected() || listView.getSelectionModel().getSelectedItem() == item) {
+                    setStyle("-fx-background-color: #3399FF; -fx-text-fill: white;");
+                } else {
+                    setStyle("");
+                }
+            }
+        }
     }
 }

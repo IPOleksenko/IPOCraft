@@ -43,6 +43,11 @@ public class UserManager {
     }
 
     public void addUser(String username, boolean minecraftAccount, String login, String password) {
+        if (isUserExists(username, minecraftAccount)) {
+            System.out.println("User with this name already exists.");
+            return;
+        }
+
         String newUuid = UUID.randomUUID().toString();
         UserEntry user = new UserEntry(username, minecraftAccount, login, password, newUuid);
         users.add(user);
@@ -64,8 +69,10 @@ public class UserManager {
                 .anyMatch(u -> Objects.equals(u.username, username) && u.minecraftAccount == minecraftAccount);
     }
 
-    private void loadUsers() {
+    public void loadUsers() {
         try {
+            listView.getItems().clear();
+
             if (Files.exists(savePath)) {
                 String json = Files.readString(savePath);
                 Type listType = new TypeToken<List<UserEntry>>() {}.getType();

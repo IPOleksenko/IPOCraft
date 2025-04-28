@@ -4,39 +4,63 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
-import javafx.scene.layout.Pane;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import javafx.geometry.Insets;
 
 import java.io.InputStream;
 
 public class RenderWindow {
 
     private Stage primaryStage;
-    private Pane root;
+    private BorderPane root;
     private Canvas canvas;
+    private ImageView logoView;
+    private StackPane centerPane;
+
     private double logicalWidth = 1024;
     private double logicalHeight = 720;
 
     public RenderWindow() {
-        root = new Pane();
+        root = new BorderPane();
+
         canvas = new Canvas(logicalWidth, logicalHeight);
-        root.getChildren().add(canvas);
+        drawBackground();
+
+        StackPane backgroundPane = new StackPane(canvas);
+        backgroundPane.setPickOnBounds(false);
+
+        logoView = new ImageView();
+        logoView.setPreserveRatio(true);
+        updateLogoImage();
+
+        VBox topBox = new VBox(logoView);
+        topBox.setStyle("-fx-alignment: center;");
+        topBox.setMinHeight(100);
+        topBox.setMaxHeight(200);
+
+        centerPane = new StackPane();
+        centerPane.setPadding(new Insets(20));
+
+        StackPane stack = new StackPane(backgroundPane, root);
+        root.setTop(topBox);
+        root.setCenter(centerPane);
     }
 
     public void show(Stage primaryStage) {
         this.primaryStage = primaryStage;
-        Scene scene = new Scene(root, logicalWidth, logicalHeight);
+        Scene scene = new Scene(new StackPane(canvas, root), logicalWidth, logicalHeight);
 
-        scene.widthProperty().addListener((observable, oldValue, newValue) -> {
-            canvas.setWidth(newValue.doubleValue());
+        scene.widthProperty().addListener((obs, oldVal, newVal) -> {
+            canvas.setWidth(newVal.doubleValue());
             drawBackground();
-            drawLogo(newValue.doubleValue(), scene.getHeight());
+            updateLogoSize(newVal.doubleValue());
         });
 
-        scene.heightProperty().addListener((observable, oldValue, newValue) -> {
-            canvas.setHeight(newValue.doubleValue());
+        scene.heightProperty().addListener((obs, oldVal, newVal) -> {
+            canvas.setHeight(newVal.doubleValue());
             drawBackground();
-            drawLogo(scene.getWidth(), newValue.doubleValue());
         });
 
         primaryStage.setTitle("IPOCraft");
@@ -45,7 +69,7 @@ public class RenderWindow {
         primaryStage.show();
 
         drawBackground();
-        drawLogo(logicalWidth, logicalHeight);
+        updateLogoSize(logicalWidth);
     }
 
     private void drawBackground() {
@@ -65,21 +89,19 @@ public class RenderWindow {
         }
     }
 
-    private void drawLogo(double windowWidth, double windowHeight) {
+    private void updateLogoImage() {
         InputStream logoStream = getClass().getResourceAsStream("/assets/logo.png");
         if (logoStream != null) {
             Image logoImage = new Image(logoStream);
-
-            double logoWidth = windowWidth * 0.3;
-            double logoHeight = logoImage.getHeight() * (logoWidth / logoImage.getWidth());
-
-            double logoX = (windowWidth - logoWidth) * 0.5;
-            double logoY = 10;
-
-            GraphicsContext gc = canvas.getGraphicsContext2D();
-            gc.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+            logoView.setImage(logoImage);
         } else {
             System.out.println("Logo not found.");
+        }
+    }
+
+    private void updateLogoSize(double windowWidth) {
+        if (logoView.getImage() != null) {
+            logoView.setFitWidth(windowWidth * 0.4);
         }
     }
 
@@ -93,13 +115,17 @@ public class RenderWindow {
         }
     }
 
-    public Pane getRoot() {
-        return root;
+    public Pane getContentPane() {
+        return centerPane;
     }
 
     public void setMaximized(boolean maximized) {
         if (primaryStage != null) {
             primaryStage.setMaximized(maximized);
         }
+    }
+
+    public ImageView getLogoView() {
+        return logoView;
     }
 }
