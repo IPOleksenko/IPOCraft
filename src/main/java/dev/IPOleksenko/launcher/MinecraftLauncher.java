@@ -15,7 +15,7 @@ import java.util.zip.ZipFile;
 public class MinecraftLauncher {
 
     private static final String VERSIONS_ROOT =
-            System.getProperty("user.home") + "/.minecraft/IPOCraft";
+            System.getProperty("user.home") + "/IPOCraft/.minecraft";
 
     public static void launch(String userName, String userUuid, String versionName) throws Exception {
         if (!userName.matches("^[A-Za-z0-9_]+$"))
@@ -50,7 +50,7 @@ public class MinecraftLauncher {
         cmd.add("--username");       cmd.add(userName);
         cmd.add("--uuid");           cmd.add(userUuid);
         cmd.add("--version");        cmd.add(versionName);
-        cmd.add("--gameDir");        cmd.add(System.getProperty("user.home") + "/.minecraft");
+        cmd.add("--gameDir");        cmd.add(verDir.toString());
         cmd.add("--assetsDir");      cmd.add(verDir.resolve("assets").toString());
         cmd.add("--assetIndex");     cmd.add(versionJson.getJSONObject("assetIndex").getString("id"));
         cmd.add("--accessToken");    cmd.add("0");
@@ -59,7 +59,7 @@ public class MinecraftLauncher {
         System.out.println("Launching with:\n  " + String.join(" \\\n  ", cmd));
 
         new ProcessBuilder(cmd)
-                .directory(new File(System.getProperty("user.home") + "/.minecraft"))
+                .directory(new File(verDir.toString()))
                 .inheritIO()
                 .start();
     }

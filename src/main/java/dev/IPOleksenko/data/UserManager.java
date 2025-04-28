@@ -31,7 +31,7 @@ public class UserManager {
     private List<UserEntry> users = new ArrayList<>();
     private final ListView<String> listView;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    private final Path savePath = Paths.get(System.getenv("APPDATA"), "IPOCraft", "users.json");
+    private final Path savePath = Paths.get(System.getProperty("user.home"), "IPOCraft", "users.json");
 
     public UserManager(ListView<String> listView) {
         this.listView = listView;

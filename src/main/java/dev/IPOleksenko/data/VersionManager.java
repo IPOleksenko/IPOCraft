@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class VersionManager {
-    private static final String VERSIONS_FOLDER = System.getProperty("user.home") + "/.minecraft/IPOCraft";
+    private static final String VERSIONS_FOLDER = System.getProperty("user.home") + "/IPOCraft/.minecraft/";
     private final ListView<String> listView;
 
     public VersionManager(ListView<String> listView) {

@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 
 public class VersionWindow {
 
-    private static final String MINECRAFT_VERSIONS_PATH = System.getProperty("user.home") + "/.minecraft/IPOCraft";
+    private static final String MINECRAFT_VERSIONS_PATH = System.getProperty("user.home") + "/IPOCraft/.minecraft/";
 
     public static void open(VersionManager versionManager) {
         Stage addVersionStage = new Stage();
