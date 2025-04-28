@@ -17,7 +17,7 @@ public class MinecraftLauncher {
     private static final String VERSIONS_ROOT =
             System.getProperty("user.home") + "/IPOCraft/.minecraft";
 
-    public static void launch(String userName, String userUuid, String versionName) throws Exception {
+    public static void launch(String userName, String userUuid, String versionName, String javaPath) throws Exception {
         if (!userName.matches("^[A-Za-z0-9_]+$"))
             throw new IllegalArgumentException("Invalid username: " + userName);
 
@@ -41,7 +41,7 @@ public class MinecraftLauncher {
         String mainClass = versionJson.optString("mainClass", "net.minecraft.client.main.Main");
 
         List<String> cmd = new ArrayList<>();
-        cmd.add("java");
+        cmd.add(Paths.get(javaPath, "bin", "java.exe").toString());
         cmd.add("-Xmx2G");
         cmd.add("-Djava.library.path=" + nativesDir.toAbsolutePath());
         cmd.add("-cp");

@@ -1,5 +1,6 @@
 package dev.IPOleksenko;
 
+import dev.IPOleksenko.data.JavaManager;
 import dev.IPOleksenko.data.UserManager;
 import dev.IPOleksenko.data.UserManager.UserEntry;
 import dev.IPOleksenko.data.VersionManager;
@@ -9,10 +10,7 @@ import dev.IPOleksenko.window.UserWindow;
 import dev.IPOleksenko.window.VersionWindow;
 import javafx.application.Application;
 import javafx.geometry.Insets;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
+import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -38,17 +36,29 @@ public class Main extends Application {
         versionListView.setPlaceholder(versionPlaceholder);
         VersionManager versionManager = new VersionManager(versionListView);
 
+        ListView<String> javaListView = new ListView<>();
+        javaListView.setPrefSize(200, 400);
+        Label javaPlaceholder = new Label("No Java versions found");
+        javaPlaceholder.setStyle("-fx-text-fill: gray; -fx-font-style: italic;");
+        javaListView.setPlaceholder(javaPlaceholder);
+        JavaManager javaManager = new JavaManager(javaListView);
+
         userManager.loadUsers();
         versionManager.loadVersions();
+        javaManager.loadJavaVersions();
 
         userListView.setCellFactory(lv -> new AlwaysSelectedListCell<>(userListView));
         versionListView.setCellFactory(lv -> new AlwaysSelectedListCell<>(versionListView));
+        javaListView.setCellFactory(lv -> new AlwaysSelectedListCell<>(javaListView));
 
         if (!userListView.getItems().isEmpty()) {
             userListView.getSelectionModel().select(0);
         }
         if (!versionListView.getItems().isEmpty()) {
             versionListView.getSelectionModel().select(0);
+        }
+        if (!javaListView.getItems().isEmpty()) {
+            javaListView.getSelectionModel().select(0);
         }
 
         Button addUser = new Button("+");
@@ -72,17 +82,23 @@ public class Main extends Application {
         VBox versionBox = new VBox(5, new HBox(5, addVersion, deleteVersion), versionListView);
         versionBox.setPadding(new Insets(10));
 
+        Button reloadJava = new Button("↻");
+        reloadJava.setOnAction(e -> javaManager.loadJavaVersions());
+        VBox javaBox = new VBox(5, reloadJava, javaListView);
+        javaBox.setPadding(new Insets(10));
+
         Button playButton = new Button("Play");
         playButton.setStyle("-fx-font-size:16px; -fx-padding:10px;");
         playButton.setOnAction(e -> {
             int userIndex = userListView.getSelectionModel().getSelectedIndex();
             int versionIndex = versionListView.getSelectionModel().getSelectedIndex();
+            int javaIndex = javaListView.getSelectionModel().getSelectedIndex();
 
-            if (userIndex < 0 || versionIndex < 0) {
-                new javafx.scene.control.Alert(
-                        javafx.scene.control.Alert.AlertType.WARNING,
-                        "Please select a user and a version.",
-                        javafx.scene.control.ButtonType.OK
+            if (userIndex < 0 || versionIndex < 0 || javaIndex < 0) {
+                new Alert(
+                        Alert.AlertType.WARNING,
+                        "Please select a user, a version, and a Java version.",
+                        ButtonType.OK
                 ).showAndWait();
                 return;
             }
@@ -91,9 +107,10 @@ public class Main extends Application {
             String username = userEntry.minecraftAccount ? userEntry.login : userEntry.username;
             String userUuid = userEntry.uuid;
             String versionName = versionListView.getItems().get(versionIndex);
+            String javaPath = javaManager.getSelectedJavaPath(javaIndex);
 
             try {
-                MinecraftLauncher.launch(username, userUuid, versionName);
+                MinecraftLauncher.launch(username, userUuid, versionName, javaPath);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
@@ -103,7 +120,7 @@ public class Main extends Application {
         playBox.setPadding(new Insets(10));
         playBox.setStyle("-fx-alignment: center;");
 
-        HBox mainBox = new HBox(50, userBox, versionBox, playBox);
+        HBox mainBox = new HBox(50, userBox, versionBox, javaBox, playBox);
         mainBox.setPadding(new Insets(10));
 
         VBox root = new VBox(mainBox);
