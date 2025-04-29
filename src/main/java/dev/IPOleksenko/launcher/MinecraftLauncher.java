@@ -16,8 +16,7 @@ public class MinecraftLauncher {
     private static final String VERSIONS_ROOT =
             System.getProperty("user.home") + "/IPOCraft/.minecraft";
 
-    public static void launch(String userName, String userUuid, String versionName, String javaPath, Consumer<Double> onProgress) throws Exception {
-        if (!userName.matches("^[A-Za-z0-9_]+$"))
+    public static void launch(String userName, String userUuid, String accessToken, String authSession, String versionName, String javaPath, Consumer<Double> onProgress) throws Exception {        if (!userName.matches("^[A-Za-z0-9_]+$"))
             throw new IllegalArgumentException("Invalid username: " + userName);
 
         Path verDir = Paths.get(VERSIONS_ROOT, versionName);
@@ -59,6 +58,7 @@ public class MinecraftLauncher {
         if (versionJson.has("minecraftArguments"))
         {
             cmd.add(userName);
+            cmd.add(authSession);
         } else if (versionJson.has("arguments")) {
             JSONObject argumentsJson = versionJson.getJSONObject("arguments");
             if (argumentsJson.has("game")){
@@ -71,7 +71,7 @@ public class MinecraftLauncher {
         cmd.add("--gameDir");        cmd.add(verDir.toString());
         cmd.add("--assetsDir");      cmd.add(assetsDir.toString());
         cmd.add("--assetIndex");     cmd.add(versionJson.getJSONObject("assetIndex").getString("id"));
-        cmd.add("--accessToken");    cmd.add("0");
+        cmd.add("--accessToken");    cmd.add(accessToken);
         cmd.add("--userProperties"); cmd.add("{}");
 
         System.out.println("Launching with:\n  " + String.join(" \\\n  ", cmd));

@@ -155,8 +155,10 @@ public class Main extends Application {
             mainBox.setDisable(true);
 
             UserEntry userEntry = userManager.getUsers().get(userIndex);
-            String username = userEntry.minecraftAccount ? userEntry.login : userEntry.username;
+            String username = userEntry.username;
             String userUuid = userEntry.uuid;
+            String accessToken = userEntry.accessToken;
+            String authSession = userEntry.authSession;
             String versionName = versionListView.getItems().get(versionIndex);
             String javaPath = javaManager.getSelectedJavaPath(javaIndex);
 
@@ -172,7 +174,7 @@ public class Main extends Application {
 
             new Thread(() -> {
                 try {
-                    MinecraftLauncher.launch(username, userUuid, versionName, javaPath, onProgress);
+                    MinecraftLauncher.launch(username, userUuid, accessToken, authSession, versionName, javaPath, onProgress);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     Platform.runLater(() -> {
