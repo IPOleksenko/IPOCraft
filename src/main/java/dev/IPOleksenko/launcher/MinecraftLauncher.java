@@ -47,6 +47,8 @@ public class MinecraftLauncher {
         cmd.add("-cp");
         cmd.add(classpath);
         cmd.add(mainClass);
+
+        cmd.add(userName);
         cmd.add("--username");       cmd.add(userName);
         cmd.add("--uuid");           cmd.add(userUuid);
         cmd.add("--version");        cmd.add(versionName);

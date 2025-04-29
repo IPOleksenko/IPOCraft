@@ -52,6 +52,9 @@ public class RenderWindow {
         this.primaryStage = primaryStage;
         Scene scene = new Scene(new StackPane(canvas, root), logicalWidth, logicalHeight);
 
+        primaryStage.setMinWidth(logicalWidth);
+        primaryStage.setMinHeight(logicalHeight);
+
         scene.widthProperty().addListener((obs, oldVal, newVal) -> {
             canvas.setWidth(newVal.doubleValue());
             drawBackground();
