@@ -4,10 +4,12 @@ import dev.IPOleksenko.data.UserManager;
 import dev.IPOleksenko.data.UserManager.UserEntry;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
 import javafx.scene.layout.*;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
+import java.io.InputStream;
 import java.util.UUID;
 
 public class UserWindow {
@@ -21,6 +23,12 @@ public class UserWindow {
         newUserStage.initModality(Modality.APPLICATION_MODAL);
         newUserStage.setTitle(editIndex == null ? "Create New User" : "Edit User");
 
+        newUserStage.setResizable(false);
+
+        InputStream iconStream = UserWindow.class.getResourceAsStream("/assets/icon.png");
+        Image icon = new Image(iconStream);
+        newUserStage.getIcons().add(icon);
+
         VBox vbox = new VBox(10);
         vbox.setStyle("-fx-padding: 10;");
 
@@ -33,7 +41,7 @@ public class UserWindow {
         VBox optionalFieldsBox = new VBox(5);
         Label uuidLabel = new Label("UUID (Optional):");
         TextField uuidField = new TextField();
-        uuidField.setPromptText("Enter UUID if you want to specify");
+        uuidField.setPromptText("Enter UUID if you want to specify (optional)");
 
         Label accessTokenLabel = new Label("Access Token (optional):");
         TextField accessTokenField = new TextField();

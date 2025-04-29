@@ -3,6 +3,7 @@ package dev.IPOleksenko.window;
 import dev.IPOleksenko.data.VersionManager;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -24,6 +25,12 @@ public class VersionWindow {
         Stage addVersionStage = new Stage();
         addVersionStage.initModality(Modality.APPLICATION_MODAL);
         addVersionStage.setTitle("Add Minecraft Version");
+
+        addVersionStage.setResizable(false);
+
+        InputStream iconStream = UserWindow.class.getResourceAsStream("/assets/icon.png");
+        Image icon = new Image(iconStream);
+        addVersionStage.getIcons().add(icon);
 
         VBox vbox = new VBox(10);
         vbox.setStyle("-fx-padding: 10;");
