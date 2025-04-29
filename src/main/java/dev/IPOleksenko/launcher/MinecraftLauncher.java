@@ -56,7 +56,16 @@ public class MinecraftLauncher {
         cmd.add(classpath);
         cmd.add(mainClass);
 
-        cmd.add("--username");       cmd.add(userName);
+        if (versionJson.has("minecraftArguments"))
+        {
+            cmd.add(userName);
+        } else if (versionJson.has("arguments")) {
+            JSONObject argumentsJson = versionJson.getJSONObject("arguments");
+            if (argumentsJson.has("game")){
+                cmd.add("--username");   cmd.add(userName);
+            }
+        }
+
         cmd.add("--uuid");           cmd.add(userUuid);
         cmd.add("--version");        cmd.add(versionName);
         cmd.add("--gameDir");        cmd.add(verDir.toString());

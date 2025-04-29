@@ -23,6 +23,10 @@ public class Main extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+        primaryStage.setOnCloseRequest(e -> {
+            System.exit(0);
+        });
+
         RenderWindow renderWindow = new RenderWindow();
 
         // User List
@@ -128,6 +132,15 @@ public class Main extends Application {
         StackPane.setAlignment(progressLabel, Pos.CENTER_RIGHT);
         StackPane.setMargin(progressLabel, new Insets(0, 10, 0, 0));
 
+        // Main container that gets disabled during loading
+        HBox mainBox = new HBox(20, userBox, versionBox, javaBox, playBox);
+        mainBox.setPadding(new Insets(10));
+        HBox.setHgrow(userBox, Priority.ALWAYS);
+        HBox.setHgrow(versionBox, Priority.ALWAYS);
+        HBox.setHgrow(javaBox, Priority.ALWAYS);
+        HBox.setHgrow(playBox, Priority.NEVER);
+
+        // Play button click handler
         playButton.setOnAction(e -> {
             int userIndex = userListView.getSelectionModel().getSelectedIndex();
             int versionIndex = versionListView.getSelectionModel().getSelectedIndex();
@@ -137,6 +150,9 @@ public class Main extends Application {
                 new Alert(Alert.AlertType.WARNING, "Please select a user, a Minecraft version and a Java version.", ButtonType.OK).showAndWait();
                 return;
             }
+
+            // Disable all UI except progressStack
+            mainBox.setDisable(true);
 
             UserEntry userEntry = userManager.getUsers().get(userIndex);
             String username = userEntry.minecraftAccount ? userEntry.login : userEntry.username;
@@ -166,19 +182,14 @@ public class Main extends Application {
                     });
                 } finally {
                     Platform.runLater(() -> {
+                        // Hide progress and re-enable UI
                         progressBar.setVisible(false);
                         progressLabel.setVisible(false);
+                        mainBox.setDisable(false);
                     });
                 }
             }).start();
         });
-
-        HBox mainBox = new HBox(20, userBox, versionBox, javaBox, playBox);
-        mainBox.setPadding(new Insets(10));
-        HBox.setHgrow(userBox, Priority.ALWAYS);
-        HBox.setHgrow(versionBox, Priority.ALWAYS);
-        HBox.setHgrow(javaBox, Priority.ALWAYS);
-        HBox.setHgrow(playBox, Priority.NEVER);
 
         VBox root = new VBox(10, mainBox, progressStack);
         root.setPadding(new Insets(10));
