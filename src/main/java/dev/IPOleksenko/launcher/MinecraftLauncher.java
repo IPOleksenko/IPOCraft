@@ -6,9 +6,8 @@ import org.json.JSONObject;
 
 import java.io.*;
 import java.nio.file.*;
-import java.util.Enumeration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -17,22 +16,31 @@ public class MinecraftLauncher {
     private static final String VERSIONS_ROOT =
             System.getProperty("user.home") + "/IPOCraft/.minecraft";
 
-    public static void launch(String userName, String userUuid, String versionName, String javaPath) throws Exception {
+    public static void launch(String userName, String userUuid, String versionName, String javaPath, Consumer<Double> onProgress) throws Exception {
         if (!userName.matches("^[A-Za-z0-9_]+$"))
             throw new IllegalArgumentException("Invalid username: " + userName);
 
         Path verDir = Paths.get(VERSIONS_ROOT, versionName);
         JSONObject versionJson = new JSONObject(Files.readString(verDir.resolve(versionName + ".json")));
 
-        DownloadManager.downloadLibraries(versionJson, verDir.resolve("libraries"));
-        DownloadManager.downloadAssets(versionJson, verDir.resolve("assets"));
+        Path libsDir = verDir.resolve("libraries");
+        Path assetsDir = verDir.resolve("assets");
+
+        List<DownloadManager.DownloadTask> tasks = DownloadManager.collectDownloadTasks(versionJson, libsDir, assetsDir);
+        int total = tasks.size();
+        int[] done = {0};
+
+        DownloadManager.executeTasks(tasks, ignored -> {
+            done[0]++;
+            onProgress.accept(done[0] / (double) total);
+        });
 
         Path nativesDir = verDir.resolve("natives");
         Files.createDirectories(nativesDir);
-        extractNatives(versionJson, verDir.resolve("libraries"), nativesDir);
+        extractNatives(versionJson, libsDir, nativesDir);
 
         List<String> classpathList = new ArrayList<>();
-        Files.walk(verDir.resolve("libraries"))
+        Files.walk(libsDir)
                 .filter(p -> p.toString().endsWith(".jar"))
                 .forEach(p -> classpathList.add(p.toAbsolutePath().toString()));
         classpathList.add(verDir.resolve(versionName + ".jar").toAbsolutePath().toString());
@@ -48,12 +56,11 @@ public class MinecraftLauncher {
         cmd.add(classpath);
         cmd.add(mainClass);
 
-        cmd.add(userName);
         cmd.add("--username");       cmd.add(userName);
         cmd.add("--uuid");           cmd.add(userUuid);
         cmd.add("--version");        cmd.add(versionName);
         cmd.add("--gameDir");        cmd.add(verDir.toString());
-        cmd.add("--assetsDir");      cmd.add(verDir.resolve("assets").toString());
+        cmd.add("--assetsDir");      cmd.add(assetsDir.toString());
         cmd.add("--assetIndex");     cmd.add(versionJson.getJSONObject("assetIndex").getString("id"));
         cmd.add("--accessToken");    cmd.add("0");
         cmd.add("--userProperties"); cmd.add("{}");

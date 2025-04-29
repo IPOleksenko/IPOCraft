@@ -6,14 +6,19 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.*;
-import java.util.Iterator;
+import java.util.*;
+import java.util.function.Consumer;
 
 public class DownloadManager {
 
     private static final String ASSETS_BASE_URL = "https://resources.download.minecraft.net/";
     private static final int BUFFER_SIZE = 8192;
 
-    public static void downloadLibraries(JSONObject versionJson, Path libsFolder) throws IOException {
+    public record DownloadTask(String url, Path target) {}
+
+    public static List<DownloadTask> collectDownloadTasks(JSONObject versionJson, Path libsFolder, Path assetsFolder) throws IOException {
+        List<DownloadTask> tasks = new ArrayList<>();
+
         versionJson.getJSONArray("libraries").forEach(obj -> {
             JSONObject lib = (JSONObject) obj;
             if (lib.has("downloads") && lib.getJSONObject("downloads").has("artifact")) {
@@ -21,20 +26,12 @@ public class DownloadManager {
                 String url = artifact.getString("url");
                 String path = artifact.getString("path");
                 Path filePath = libsFolder.resolve(path);
-                try {
-                    if (!Files.exists(filePath)) {
-                        Files.createDirectories(filePath.getParent());
-                        downloadFile(url, filePath);
-                        System.out.println("Downloaded library: " + path);
-                    }
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
+                if (!Files.exists(filePath)) {
+                    tasks.add(new DownloadTask(url, filePath));
                 }
             }
         });
-    }
 
-    public static void downloadAssets(JSONObject versionJson, Path assetsFolder) throws IOException {
         JSONObject assetIndexInfo = versionJson.getJSONObject("assetIndex");
         String indexUrl = assetIndexInfo.getString("url");
 
@@ -44,21 +41,15 @@ public class DownloadManager {
         }
 
         JSONObject objects = indexJson.getJSONObject("objects");
-        Iterator<String> keys = objects.keys();
-        while (keys.hasNext()) {
-            String assetName = keys.next();
+        for (String assetName : objects.keySet()) {
             JSONObject assetInfo = objects.getJSONObject(assetName);
             String hash = assetInfo.getString("hash");
             String subDir = hash.substring(0, 2);
-
             Path target = assetsFolder.resolve("objects").resolve(subDir).resolve(hash);
-            if (Files.exists(target)) continue;
-
-            Files.createDirectories(target.getParent());
-            String downloadUrl = ASSETS_BASE_URL + subDir + "/" + hash;
-            System.out.println("Downloading asset: " + assetName);
-
-            downloadFile(downloadUrl, target);
+            if (!Files.exists(target)) {
+                String downloadUrl = ASSETS_BASE_URL + subDir + "/" + hash;
+                tasks.add(new DownloadTask(downloadUrl, target));
+            }
         }
 
         Path indexDest = assetsFolder.resolve("indexes")
@@ -66,6 +57,22 @@ public class DownloadManager {
         Files.createDirectories(indexDest.getParent());
         try (BufferedWriter writer = Files.newBufferedWriter(indexDest)) {
             writer.write(indexJson.toString(4));
+        }
+
+        return tasks;
+    }
+
+    public static void executeTasks(List<DownloadTask> tasks, Consumer<Double> progressCallback) throws IOException {
+        int total = tasks.size();
+        int done = 0;
+        for (DownloadTask task : tasks) {
+            Files.createDirectories(task.target().getParent());
+            System.out.println("Downloading: " + task.url());
+            downloadFile(task.url(), task.target());
+            done++;
+            if (progressCallback != null) {
+                progressCallback.accept(done / (double) total);
+            }
         }
     }
 
