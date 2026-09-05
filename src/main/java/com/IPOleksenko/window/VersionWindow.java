@@ -1,6 +1,5 @@
-package dev.IPOleksenko.window;
+package com.IPOleksenko.window;
 
-import dev.IPOleksenko.data.VersionManager;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -9,6 +8,8 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import com.IPOleksenko.data.VersionManager;
 
 import java.io.*;
 import java.net.HttpURLConnection;

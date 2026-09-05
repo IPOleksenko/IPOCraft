@@ -11,8 +11,8 @@ plugins {
     id("com.github.johnrengelman.shadow") version "7.1.2"
 }
 
-group = "dev.IPOleksenko"
-version = "1.0-SNAPSHOT"
+group = "com.IPOleksenko"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -35,8 +35,16 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+}
+
+tasks.withType<Javadoc> {
+    options.encoding = "UTF-8"
+}
+
 application {
-    mainClass.set("dev.IPOleksenko.Main")
+    mainClass.set("com.IPOleksenko.Main")
 }
 
 tasks.withType<ShadowJar> {
@@ -45,7 +53,7 @@ tasks.withType<ShadowJar> {
     archiveFileName.set("IPOCraft.jar")  // Set full file name
     manifest {
         attributes(
-            "Main-Class" to "dev.IPOleksenko.Main"
+            "Main-Class" to "com.IPOleksenko.Main"
         )
     }
     mergeServiceFiles()
@@ -72,15 +80,15 @@ task("generateRunScript") {
         val scriptContent = when {
             osName.isWindows -> """
                 @echo off
-                java --module-path libs;natives --add-modules javafx.controls -jar IPOCraft.jar
+                java -Dfile.encoding=UTF-8 --module-path libs;natives --add-modules javafx.controls -jar IPOCraft.jar
             """.trimIndent()
             osName.isMacOsX -> """
                 #!/bin/bash
-                java --module-path libs:natives --add-modules javafx.controls -jar IPOCraft.jar
+                java -Dfile.encoding=UTF-8 --module-path libs:natives --add-modules javafx.controls -jar IPOCraft.jar
             """.trimIndent()
             osName.isLinux -> """
                 #!/bin/bash
-                java --module-path libs:natives --add-modules javafx.controls -jar IPOCraft.jar
+                java -Dfile.encoding=UTF-8 --module-path libs:natives --add-modules javafx.controls -jar IPOCraft.jar
             """.trimIndent()
             else -> throw GradleException("Unsupported OS: ${osName.name}")
         }
@@ -88,10 +96,26 @@ task("generateRunScript") {
         val scriptFile = File("$buildDir/libs/run.sh")
         scriptFile.writeText(scriptContent)
 
-        // For Windows, create a .bat file
+        // For Windows, create silent run.bat and IPOCraft.vbs
         if (osName.isWindows) {
+            val winScript = """
+                @echo off
+                setlocal enabledelayedexpansion
+                set "JAVA_CMD=javaw"
+                if defined JAVA_HOME if exist "%JAVA_HOME%\bin\javaw.exe" set "JAVA_CMD=%JAVA_HOME%\bin\javaw.exe"
+                if exist "C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin\javaw.exe" set "JAVA_CMD=C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin\javaw.exe"
+                start "" "%JAVA_CMD%" -Dfile.encoding=UTF-8 --module-path libs;natives --add-modules javafx.controls -jar IPOCraft.jar
+                exit
+            """.trimIndent()
             val batFile = File("$buildDir/libs/run.bat")
-            batFile.writeText(scriptContent.replace("java --module-path libs;natives", "java --module-path libs;natives"))
+            batFile.writeText(winScript)
+
+            val vbsContent = """
+                Set WshShell = CreateObject("WScript.Shell")
+                WshShell.Run chr(34) & "run.bat" & chr(34), 0, False
+            """.trimIndent()
+            File("$buildDir/libs/IPOCraft.vbs").writeText(vbsContent)
+            File("$buildDir/libs/run.vbs").writeText(vbsContent)
         }
     }
 }
@@ -102,7 +126,7 @@ task("generateRunScript") {
 task("buildWin", type = Zip::class) {
     dependsOn("shadowJar", "copyJavafxNatives", "generateRunScript")
     from("$buildDir/libs") {
-        include("IPOCraft.jar", "natives/**", "run.bat")
+        include("IPOCraft.jar", "natives/**", "run.bat", "run.vbs", "IPOCraft.vbs")
         into("IPOCraft")
     }
     archiveFileName.set("IPOCraft_win.zip")

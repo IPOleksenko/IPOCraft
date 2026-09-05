@@ -1,4 +1,4 @@
-package dev.IPOleksenko.data;
+package com.IPOleksenko.data;
 
 import javafx.scene.control.ListView;
 

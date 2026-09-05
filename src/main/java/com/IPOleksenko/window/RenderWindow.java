@@ -1,4 +1,4 @@
-package dev.IPOleksenko.window;
+package com.IPOleksenko.window;
 
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;

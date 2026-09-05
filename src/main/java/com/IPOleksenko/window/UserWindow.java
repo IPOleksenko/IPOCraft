@@ -1,7 +1,5 @@
-package dev.IPOleksenko.window;
+package com.IPOleksenko.window;
 
-import dev.IPOleksenko.data.UserManager;
-import dev.IPOleksenko.data.UserManager.UserEntry;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -11,6 +9,9 @@ import javafx.stage.Stage;
 
 import java.io.InputStream;
 import java.util.UUID;
+
+import com.IPOleksenko.data.UserManager;
+import com.IPOleksenko.data.UserManager.UserEntry;
 
 public class UserWindow {
 
