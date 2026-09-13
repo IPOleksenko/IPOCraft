@@ -27,6 +27,7 @@ public class MicrosoftLoginDialog {
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Microsoft Account Sign-In");
         stage.setResizable(false);
+        com.IPOleksenko.ui.UIUtils.applyWindowIcon(stage);
 
         VBox root = new VBox(16);
         root.setPadding(new Insets(24));

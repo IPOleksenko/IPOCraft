@@ -19,10 +19,16 @@ import com.IPOleksenko.launcher.VersionScanner;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Consumer;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Rectangle;
+import javafx.stage.FileChooser;
+import com.IPOleksenko.ui.UIUtils;
 
 public class CreateInstanceDialog {
 
@@ -32,6 +38,7 @@ public class CreateInstanceDialog {
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Create Instance");
         stage.setResizable(false);
+        UIUtils.applyWindowIcon(stage);
 
         VBox root = new VBox(14);
         root.setPadding(new Insets(20));
@@ -42,11 +49,69 @@ public class CreateInstanceDialog {
         title.getStyleClass().add("card-title");
         title.setStyle("-fx-font-size: 18px; -fx-text-fill: #ffffff;");
 
-        // 1. Instance Name (DO NOT auto-fill version or modloader)
-        Label nameLabel = new Label("Instance Name:");
+        // 1. Instance Name (defaults to selected version name)
+        Label nameLabel = new Label("Instance Name / Название версии:");
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         TextField nameField = new TextField();
-        nameField.setPromptText("e.g. Survival, Hardcore, Creative");
+        nameField.setPromptText("Enter instance name (default: selected version)");
+
+        final boolean[] userCustomizedName = new boolean[]{false};
+        final boolean[] isProgrammaticUpdate = new boolean[]{false};
+
+        nameField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (!isProgrammaticUpdate[0]) {
+                userCustomizedName[0] = (newVal != null && !newVal.trim().isEmpty());
+            }
+        });
+
+        // Custom Icon for Instance
+        Label iconLabel = new Label("Instance Icon (Custom Icon / Своя иконка):");
+        iconLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+
+        final String[] customIconHolder = new String[]{""};
+        ImageView iconPreview = new ImageView();
+        iconPreview.setFitWidth(36);
+        iconPreview.setFitHeight(36);
+        iconPreview.setPreserveRatio(false);
+        Rectangle iconClip = new Rectangle(36, 36);
+        iconClip.setArcWidth(8);
+        iconClip.setArcHeight(8);
+        iconPreview.setClip(iconClip);
+        Image defaultIconImg = UIUtils.loadImage("/assets/icon.png");
+        if (defaultIconImg != null) iconPreview.setImage(defaultIconImg);
+
+        Button chooseIconBtn = new Button("Browse Custom Icon...");
+        chooseIconBtn.getStyleClass().add("btn-secondary");
+
+        Button resetIconBtn = new Button("Reset");
+        resetIconBtn.getStyleClass().add("btn-secondary");
+        resetIconBtn.setVisible(false);
+
+        chooseIconBtn.setOnAction(e -> {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Select Instance Icon");
+            fc.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Image Files (*.png, *.jpg, *.jpeg)", "*.png", "*.jpg", "*.jpeg")
+            );
+            File file = fc.showOpenDialog(stage);
+            if (file != null && file.exists()) {
+                customIconHolder[0] = file.getAbsolutePath();
+                Image img = new Image(file.toURI().toString());
+                if (!img.isError()) {
+                    iconPreview.setImage(img);
+                    resetIconBtn.setVisible(true);
+                }
+            }
+        });
+
+        resetIconBtn.setOnAction(e -> {
+            customIconHolder[0] = "";
+            if (defaultIconImg != null) iconPreview.setImage(defaultIconImg);
+            resetIconBtn.setVisible(false);
+        });
+
+        HBox iconBox = new HBox(10, iconPreview, chooseIconBtn, resetIconBtn);
+        iconBox.setAlignment(Pos.CENTER_LEFT);
 
         // 2. Version Selection
         Label verLabel = new Label("Minecraft Version:");
@@ -84,12 +149,30 @@ public class CreateInstanceDialog {
 
         FlowPane filterBox = new FlowPane(10, 8, cbReleases, cbSnapshots, cbOldBeta, cbOldAlpha, cbCustom);
 
+        Label searchLabel = new Label("Search Version / Поиск версии:");
+        searchLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+
         TextField searchField = new TextField();
+        searchField.setPromptText("Type version to search...");
 
         ComboBox<String> versionCombo = new ComboBox<>();
         versionCombo.setMaxWidth(Double.MAX_VALUE);
         versionCombo.setVisibleRowCount(16);
         versionCombo.setPromptText("Loading official versions...");
+
+        Runnable syncNameToVersion = () -> {
+            String val = versionCombo.getValue();
+            if (val != null && !val.isEmpty()) {
+                String clean = cleanVersionId(val);
+                if (!clean.isEmpty() && (!userCustomizedName[0] || nameField.getText().trim().isEmpty())) {
+                    isProgrammaticUpdate[0] = true;
+                    nameField.setText(clean);
+                    isProgrammaticUpdate[0] = false;
+                }
+            }
+        };
+
+        versionCombo.valueProperty().addListener((obs, o, n) -> syncNameToVersion.run());
 
         // 3. Java Runtime for Instance
         Label javaLabel = new Label("Java Runtime for Instance:");
@@ -131,17 +214,11 @@ public class CreateInstanceDialog {
         Label ramLabel = new Label("Memory Allocation (RAM):");
         ramLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         ComboBox<String> ramCombo = new ComboBox<>();
-        ramCombo.getItems().addAll(
-                "Default (from launcher settings)",
-                "2048 MB (2 GB)",
-                "3072 MB (3 GB)",
-                "4096 MB (4 GB)",
-                "6144 MB (6 GB)",
-                "8192 MB (8 GB)",
-                "12288 MB (12 GB)"
-        );
+        ramCombo.getItems().setAll(UIUtils.getRamPresets());
+        ramCombo.setEditable(true);
         ramCombo.setValue("Default (from launcher settings)");
         ramCombo.setMaxWidth(Double.MAX_VALUE);
+        ramCombo.setPromptText("Select preset or type any RAM (e.g. 8192, 16 GB)...");
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
@@ -160,7 +237,8 @@ public class CreateInstanceDialog {
         root.getChildren().addAll(
                 title,
                 nameLabel, nameField,
-                verHeader, filterBox, searchField, versionCombo,
+                iconLabel, iconBox,
+                verHeader, filterBox, searchLabel, searchField, versionCombo,
                 javaLabel, javaCombo,
                 ramLabel, ramCombo,
                 statusLabel,
@@ -235,6 +313,7 @@ public class CreateInstanceDialog {
                     versionCombo.setValue(versionCombo.getItems().get(0));
                 }
             }
+            syncNameToVersion.run();
         };
 
         cbReleases.setOnAction(e -> updateCombo.run());
@@ -335,6 +414,10 @@ public class CreateInstanceDialog {
             String verId = cleanVersionId(rawVer);
             Instance inst = InstanceManager.getInstance().createInstance(name, verId);
 
+            if (customIconHolder[0] != null && !customIconHolder[0].trim().isEmpty()) {
+                inst.setIcon(customIconHolder[0].trim());
+            }
+
             // Java selection
             String selJava = javaCombo.getValue();
             if (selJava != null && !selJava.startsWith("Auto")) {
@@ -343,10 +426,9 @@ public class CreateInstanceDialog {
             }
 
             // RAM selection
-            String selRam = ramCombo.getValue();
-            if (selRam != null && !selRam.startsWith("Default")) {
-                int mb = Integer.parseInt(selRam.split(" ")[0]);
-                inst.setCustomMemoryMb(mb);
+            Integer customRam = UIUtils.parseRamMb(ramCombo.getValue());
+            if (customRam != null) {
+                inst.setCustomMemoryMb(customRam);
             }
 
             InstanceManager.getInstance().saveInstances();
@@ -354,7 +436,11 @@ public class CreateInstanceDialog {
             stage.close();
         });
 
-        Scene scene = new Scene(root);
+        ScrollPane scrollPane = new ScrollPane(root);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background-color: #161922; -fx-background: #161922;");
+
+        Scene scene = new Scene(scrollPane, 540, 680);
         scene.getStylesheets().add(CreateInstanceDialog.class.getResource("/assets/style.css").toExternalForm());
         stage.setScene(scene);
         stage.showAndWait();

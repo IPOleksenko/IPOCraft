@@ -15,6 +15,8 @@ public class Instance {
     private long lastPlayedTimestamp;
     private Integer customMemoryMb;
     private String customJvmArgs;
+    private String customGameArgs;
+    private Boolean overrideJvmArgs;
     private String customJavaPath;
 
     public Instance() {
@@ -119,6 +121,22 @@ public class Instance {
 
     public void setCustomJvmArgs(String customJvmArgs) {
         this.customJvmArgs = customJvmArgs;
+    }
+
+    public String getCustomGameArgs() {
+        return customGameArgs != null ? customGameArgs : "";
+    }
+
+    public void setCustomGameArgs(String customGameArgs) {
+        this.customGameArgs = customGameArgs;
+    }
+
+    public boolean isOverrideJvmArgs() {
+        return overrideJvmArgs != null && overrideJvmArgs;
+    }
+
+    public void setOverrideJvmArgs(Boolean overrideJvmArgs) {
+        this.overrideJvmArgs = overrideJvmArgs;
     }
 
     public String getCustomJavaPath() {

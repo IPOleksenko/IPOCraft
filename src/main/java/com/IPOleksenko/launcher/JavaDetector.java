@@ -87,7 +87,7 @@ public class JavaDetector {
     private static ScheduledExecutorService monitorScheduler = null;
 
     /**
-     * Start background daemon scheduler checking for Java runtime installations/changes every 2 seconds.
+     * Start background daemon scheduler checking for Java runtime installations/changes periodically.
      */
     public static synchronized void startMonitoring() {
         if (monitorScheduler == null || monitorScheduler.isShutdown()) {
@@ -98,8 +98,8 @@ public class JavaDetector {
             });
             // Initial scan in background
             monitorScheduler.execute(JavaDetector::scanAndNotifyIfChanged);
-            // Periodic scan every 2 seconds
-            monitorScheduler.scheduleWithFixedDelay(JavaDetector::scanAndNotifyIfChanged, 2, 2, TimeUnit.SECONDS);
+            // Periodic scan every 60 seconds (also refreshed immediately on window focus and on dropdown click)
+            monitorScheduler.scheduleWithFixedDelay(JavaDetector::scanAndNotifyIfChanged, 15, 60, TimeUnit.SECONDS);
         }
     }
 

@@ -3,6 +3,7 @@ package com.IPOleksenko.ui;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
@@ -22,6 +23,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.IPOleksenko.auth.Account;
 import com.IPOleksenko.auth.AccountManager;
@@ -57,6 +62,7 @@ public class MainWindow {
     private VBox consolePage;
 
     // Hero Play Bar components
+    private javafx.scene.layout.StackPane heroInstanceIconContainer;
     private Label heroInstanceName;
     private Label heroInstanceVersion;
     private ComboBox<String> heroJavaSelector;
@@ -99,7 +105,7 @@ public class MainWindow {
         }
 
         buildUI();
-        setupSystemStreamsRedirection();
+        initInternalTerminal();
 
         Scene scene = new Scene(rootStack, 1120, 740);
         scene.getStylesheets().add(getClass().getResource("/assets/style.css").toExternalForm());
@@ -271,6 +277,8 @@ public class MainWindow {
         HBox box = new HBox(10);
         box.setAlignment(Pos.CENTER_LEFT);
         box.setPadding(new Insets(10));
+        box.setMinHeight(52);
+        box.setPrefHeight(52);
         box.setStyle("-fx-background-color: #1e222b; -fx-background-radius: 8px; -fx-border-color: #2e3646; -fx-border-radius: 8px; -fx-cursor: hand;");
 
         sidebarAvatar = new ImageView();
@@ -311,10 +319,20 @@ public class MainWindow {
                 sidebarAccountType.setText("Offline");
                 sidebarAccountType.getStyleClass().setAll("badge-offline");
             }
+            Image userImg = UIUtils.loadImage(active.getCustomIconPath());
+            if (userImg == null && active.getSkinUrl() != null) {
+                userImg = UIUtils.loadImage(active.getSkinUrl());
+            }
+            if (userImg == null) {
+                userImg = UIUtils.loadImage("/assets/icon.png");
+            }
+            if (userImg != null) sidebarAvatar.setImage(userImg);
         } else {
             sidebarUsername.setText("No Account");
             sidebarAccountType.setText("Click to add");
             sidebarAccountType.getStyleClass().setAll("badge-offline");
+            Image defImg = UIUtils.loadImage("/assets/icon.png");
+            if (defImg != null) sidebarAvatar.setImage(defImg);
         }
     }
 
@@ -328,6 +346,8 @@ public class MainWindow {
 
         HBox header = new HBox(12);
         header.setAlignment(Pos.CENTER_LEFT);
+        header.setMinHeight(40);
+        header.setPrefHeight(40);
 
         Label title = new Label("Installed Instances");
         title.getStyleClass().add("card-title");
@@ -380,8 +400,7 @@ public class MainWindow {
                 card.getStyleClass().add("selected");
             }
 
-            Label iconLbl = new Label("MC");
-            iconLbl.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #3b82f6; -fx-background-color: #14171f; -fx-padding: 6 10; -fx-background-radius: 6px;");
+            Node iconNode = UIUtils.createInstanceIcon(inst, 36);
 
             VBox info = new VBox(4);
             Label nameLbl = new Label(inst.getName());
@@ -446,7 +465,7 @@ public class MainWindow {
                 });
             });
 
-            card.getChildren().addAll(iconLbl, info, selectBtn, editBtn, renameBtn, cloneBtn, folderBtn, deleteBtn);
+            card.getChildren().addAll(iconNode, info, selectBtn, editBtn, renameBtn, cloneBtn, folderBtn, deleteBtn);
             instancesContainer.getChildren().add(card);
         }
     }
@@ -541,10 +560,7 @@ public class MainWindow {
                 card.setStyle("-fx-border-color: #2563eb; -fx-border-width: 2px; -fx-background-color: #222a38;");
             }
 
-            Label avatar = new Label(acc.isMicrosoft() ? "MS" : "OFF");
-            avatar.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: "
-                    + (acc.isMicrosoft() ? "#4ade80" : "#94a3b8")
-                    + "; -fx-background-color: #14171f; -fx-padding: 6 10; -fx-background-radius: 6px;");
+            Node avatar = UIUtils.createAccountIcon(acc, 36);
 
             VBox info = new VBox(3);
             Label name = new Label(acc.getUsername());
@@ -786,10 +802,11 @@ public class MainWindow {
         Label memTitle = new Label("Memory Allocation (RAM)");
         memTitle.getStyleClass().add("card-title");
 
-        ramSlider = new Slider(1024, 16384, config.getMaxMemoryMb());
-        ramSlider.setMajorTickUnit(1024);
+        int maxOsMb = Math.max(16384, UIUtils.getTotalSystemMemoryMb());
+        ramSlider = new Slider(1024, maxOsMb, Math.min(maxOsMb, config.getMaxMemoryMb()));
+        ramSlider.setMajorTickUnit(Math.max(1024, (maxOsMb / 16) / 1024 * 1024));
         ramSlider.setMinorTickCount(1);
-        ramSlider.setSnapToTicks(true);
+        ramSlider.setSnapToTicks(false);
 
         ramValueLabel = new Label(formatRam(config.getMaxMemoryMb()));
         ramValueLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #3b82f6;");
@@ -887,17 +904,51 @@ public class MainWindow {
         Label msTitle = new Label("Microsoft Azure Client ID");
         msTitle.getStyleClass().add("card-title");
 
-        msClientIdField = new TextField(config.getMicrosoftClientId() != null ? config.getMicrosoftClientId() : "43b56eb6-cbec-4278-9c39-d70c21aa6d49");
-        msClientIdField.setPromptText("43b56eb6-cbec-4278-9c39-d70c21aa6d49");
+        Label msDesc = new Label("Choose an approved client ID preset or provide your own registered Azure App ID:");
+        msDesc.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
+
+        ComboBox<String> msPresetCombo = new ComboBox<>();
+        msPresetCombo.getItems().addAll(
+                "Prism Launcher (Approved / Default)",
+                "MultiMC (Approved)",
+                "Custom Client ID"
+        );
+
+        String currentId = config.getMicrosoftClientId();
+        if ("499546d9-bbfe-4b9b-a086-eb3d75afb78f".equalsIgnoreCase(currentId)) {
+            msPresetCombo.setValue("MultiMC (Approved)");
+        } else if ("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb".equalsIgnoreCase(currentId)) {
+            msPresetCombo.setValue("Prism Launcher (Approved / Default)");
+        } else {
+            msPresetCombo.setValue("Custom Client ID");
+        }
+
+        msClientIdField = new TextField(currentId != null ? currentId : "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+        msClientIdField.setPromptText("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+
+        msPresetCombo.setOnAction(e -> {
+            String val = msPresetCombo.getValue();
+            if (val != null && val.contains("Prism")) {
+                msClientIdField.setText("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+            } else if (val != null && val.contains("MultiMC")) {
+                msClientIdField.setText("499546d9-bbfe-4b9b-a086-eb3d75afb78f");
+            }
+        });
 
         Button resetMsIdBtn = new Button("Reset to Default");
         resetMsIdBtn.getStyleClass().add("btn-secondary");
-        resetMsIdBtn.setOnAction(e -> msClientIdField.setText("43b56eb6-cbec-4278-9c39-d70c21aa6d49"));
+        resetMsIdBtn.setOnAction(e -> {
+            msPresetCombo.setValue("Prism Launcher (Approved / Default)");
+            msClientIdField.setText("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+        });
 
-        HBox msBox = new HBox(8, msClientIdField, resetMsIdBtn);
+        HBox msBox = new HBox(8, msPresetCombo, msClientIdField, resetMsIdBtn);
         HBox.setHgrow(msClientIdField, Priority.ALWAYS);
 
-        msCard.getChildren().addAll(msTitle, msBox);
+        Label msNotice = new Label("Note: Custom client IDs must be submitted for approval at https://aka.ms/mce-reviewappid to avoid HTTP 403 errors.");
+        msNotice.setStyle("-fx-text-fill: #64748b; -fx-font-size: 11px;");
+
+        msCard.getChildren().addAll(msTitle, msDesc, msBox, msNotice);
 
         Button saveBtn = new Button("Save Settings");
         saveBtn.getStyleClass().add("btn-primary");
@@ -1154,71 +1205,61 @@ public class MainWindow {
         }
     }
 
-    private void setupSystemStreamsRedirection() {
-        PrintStream originalOut = System.out;
-        PrintStream originalErr = System.err;
-
-        OutputStream outStream = new OutputStream() {
-            private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-
-            @Override
-            public synchronized void write(int b) {
-                if (b == '\n') {
-                    String line = buffer.toString(StandardCharsets.UTF_8);
-                    buffer.reset();
-                    appendLog(line);
-                    originalOut.println(line);
-                } else if (b != '\r') {
-                    buffer.write(b);
-                }
-            }
-
-            @Override
-            public synchronized void write(byte[] b, int off, int len) {
-                for (int i = off; i < off + len; i++) {
-                    write(b[i]);
-                }
-            }
-        };
-
-        OutputStream errStream = new OutputStream() {
-            private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-
-            @Override
-            public synchronized void write(int b) {
-                if (b == '\n') {
-                    String line = buffer.toString(StandardCharsets.UTF_8);
-                    buffer.reset();
-                    appendLog("[ERR] " + line);
-                    originalErr.println(line);
-                } else if (b != '\r') {
-                    buffer.write(b);
-                }
-            }
-
-            @Override
-            public synchronized void write(byte[] b, int off, int len) {
-                for (int i = off; i < off + len; i++) {
-                    write(b[i]);
-                }
-            }
-        };
-
-        System.setOut(new PrintStream(outStream, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(errStream, true, StandardCharsets.UTF_8));
-
+    private void initInternalTerminal() {
         appendLog("[IPOCraft] Internal terminal ready.");
         appendLog("[IPOCraft] Launcher running in GUI mode (no external console window).");
         appendLog("[IPOCraft] Type 'help' in the prompt below for available commands.");
     }
 
+    // High-performance log batching queue to prevent UI freeze and thread starvation
+    private final ConcurrentLinkedQueue<String> pendingLogs = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean flushScheduled = new AtomicBoolean(false);
+    private static final int MAX_CONSOLE_CHARS = 250_000;
+    private static final int TRUNCATE_CHUNK = 50_000;
+
     public void appendLog(String line) {
-        Platform.runLater(() -> {
-            logBuffer.append(line).append('\n');
-            if (consoleTextArea != null) {
-                consoleTextArea.appendText(line + "\n");
+        if (line == null) return;
+        pendingLogs.add(line);
+        scheduleLogFlush();
+    }
+
+    private void scheduleLogFlush() {
+        if (flushScheduled.compareAndSet(false, true)) {
+            CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS).execute(() -> {
+                Platform.runLater(this::flushPendingLogs);
+            });
+        }
+    }
+
+    private void flushPendingLogs() {
+        flushScheduled.set(false);
+        if (pendingLogs.isEmpty()) return;
+
+        StringBuilder batch = new StringBuilder();
+        String l;
+        int count = 0;
+        while ((l = pendingLogs.poll()) != null && count < 500) {
+            batch.append(l).append('\n');
+            count++;
+        }
+
+        if (batch.length() > 0) {
+            logBuffer.append(batch);
+            if (logBuffer.length() > MAX_CONSOLE_CHARS * 2) {
+                logBuffer.delete(0, TRUNCATE_CHUNK * 2);
             }
-        });
+
+            if (consoleTextArea != null) {
+                consoleTextArea.appendText(batch.toString());
+                if (consoleTextArea.getLength() > MAX_CONSOLE_CHARS) {
+                    consoleTextArea.deleteText(0, TRUNCATE_CHUNK);
+                }
+            }
+        }
+
+        if (!pendingLogs.isEmpty()) {
+            scheduleLogFlush();
+        }
     }
 
     // ==========================================
@@ -1228,6 +1269,13 @@ public class MainWindow {
         HBox bar = new HBox(16);
         bar.getStyleClass().add("hero-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setMinHeight(68);
+        bar.setPrefHeight(68);
+
+        heroInstanceIconContainer = new javafx.scene.layout.StackPane();
+        heroInstanceIconContainer.setPrefSize(36, 36);
+        heroInstanceIconContainer.setMinSize(36, 36);
+        heroInstanceIconContainer.setMaxSize(36, 36);
 
         heroInstanceName = new Label("Instance");
         heroInstanceName.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #ffffff;");
@@ -1235,8 +1283,10 @@ public class MainWindow {
         heroInstanceVersion = new Label("Version");
         heroInstanceVersion.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 11px;");
 
-        VBox instanceInfo = new VBox(2, heroInstanceName, heroInstanceVersion);
-        instanceInfo.setMinWidth(160);
+        VBox textInfo = new VBox(2, heroInstanceName, heroInstanceVersion);
+        HBox instanceInfo = new HBox(10, heroInstanceIconContainer, textInfo);
+        instanceInfo.setAlignment(Pos.CENTER_LEFT);
+        instanceInfo.setMinWidth(180);
 
         // Java runtime quick selector right in the play bar
         VBox javaBox = new VBox(2);
@@ -1332,6 +1382,7 @@ public class MainWindow {
     private void refreshHeroBar() {
         Instance active = instanceManager.getActiveInstance();
         if (active != null) {
+            heroInstanceIconContainer.getChildren().setAll(UIUtils.createInstanceIcon(active, 36));
             heroInstanceName.setText(active.getName());
             heroInstanceVersion.setText("Version: " + active.getMinecraftVersion());
             heroPlayButton.setDisable(false);
@@ -1351,6 +1402,7 @@ public class MainWindow {
                 heroJavaSelector.setValue("Auto (Recommended)");
             }
         } else {
+            heroInstanceIconContainer.getChildren().clear();
             heroInstanceName.setText("No instance selected");
             heroInstanceVersion.setText("-");
             heroPlayButton.setDisable(true);
@@ -1411,6 +1463,8 @@ public class MainWindow {
                 );
 
                 Platform.runLater(() -> {
+                    heroProgressBar.setVisible(false);
+                    heroProgressBar.setProgress(0);
                     heroStatusLabel.setText("Minecraft is running!");
                     if (terminalStatusBadge != null) {
                         terminalStatusBadge.setText("[ Game Running ]");

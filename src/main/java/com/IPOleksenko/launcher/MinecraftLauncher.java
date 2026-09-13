@@ -13,6 +13,7 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
@@ -50,6 +51,10 @@ public class MinecraftLauncher {
         if (statusCallback != null) statusCallback.accept("Checking libraries and assets...");
         Files.createDirectories(sharedLibs);
         Files.createDirectories(sharedAssets);
+
+        // Synchronize Forge processor libraries (client-srg.jar, forge-client.jar, etc.) from system repo if missing
+        syncForgeAndSystemLibraries(sharedLibs, logCallback);
+        verifyForgeLibraries(versionJson, sharedLibs, logCallback);
 
         List<DownloadManager.DownloadTask> tasks = DownloadManager.collectDownloadTasks(versionJson, sharedLibs, sharedAssets);
 
@@ -119,115 +124,8 @@ public class MinecraftLauncher {
         if (minMemory > maxMemory) minMemory = maxMemory;
 
         // 7. Assemble JVM & Game arguments
-        String safeNatives = toSafeClasspathEntry(nativesDir.toAbsolutePath().toString());
-        List<String> rawCmd = new ArrayList<>();
-        rawCmd.add(javaExe);
-        rawCmd.add("-Xms" + minMemory + "M");
-        rawCmd.add("-Xmx" + maxMemory + "M");
-        rawCmd.add("-Djava.library.path=" + safeNatives);
-
-        // Custom JVM arguments
-        String jvmArgsStr = (instance.getCustomJvmArgs() != null && !instance.getCustomJvmArgs().isEmpty())
-                ? instance.getCustomJvmArgs()
-                : config.getJvmArgs();
-        if (jvmArgsStr != null && !jvmArgsStr.trim().isEmpty()) {
-            for (String arg : jvmArgsStr.trim().split("\\s+")) {
-                if (!arg.isEmpty()) rawCmd.add(arg);
-            }
-        }
-
-        Path assetsPath = sharedAssets;
-        if (versionJson.has("assetIndex")) {
-            JSONObject aIndex = versionJson.getJSONObject("assetIndex");
-            String idxId = aIndex.optString("id", "");
-            Path virt = sharedAssets.resolve("virtual").resolve(idxId);
-            if (Files.exists(virt)) {
-                assetsPath = virt;
-            }
-        }
-
-        Map<String, String> tokens = new HashMap<>();
-        tokens.put("natives_directory", nativesDir.toAbsolutePath().toString());
-        tokens.put("natives_directory", safeNatives);
-        tokens.put("launcher_name", "IPOCraft");
-        tokens.put("launcher_version", "2.0");
-        tokens.put("classpath", classpath);
-        tokens.put("auth_player_name", account.getUsername());
-        tokens.put("version_name", instance.getMinecraftVersion());
-        tokens.put("game_directory", instance.getGameDir().toAbsolutePath().toString());
-        tokens.put("assets_root", sharedAssets.toAbsolutePath().toString());
-        tokens.put("game_assets", assetsPath.toAbsolutePath().toString());
-        tokens.put("assets_index_name", versionJson.optJSONObject("assetIndex") != null
-                ? versionJson.getJSONObject("assetIndex").optString("id", instance.getMinecraftVersion())
-                : instance.getMinecraftVersion());
-        tokens.put("auth_uuid", account.getUuid().replace("-", ""));
-        tokens.put("auth_access_token", account.getAccessToken());
-        tokens.put("auth_session", account.getAuthSession());
-        tokens.put("user_type", account.isMicrosoft() ? "msa" : "mojang");
-        tokens.put("user_properties", "{}");
-        tokens.put("user_property_map", "{}");
-        tokens.put("profile_name", account.getUsername());
-        tokens.put("version_type", "release");
-        tokens.put("resolution_width", String.valueOf(config.getGameWidth()));
-        tokens.put("resolution_height", String.valueOf(config.getGameHeight()));
-        tokens.put("clientid", config.getMicrosoftClientId() != null ? config.getMicrosoftClientId() : "43b56eb6-cbec-4278-9c39-d70c21aa6d49");
-        tokens.put("auth_xuid", account.getUuid().replace("-", ""));
-
-        // Modern arguments support (1.13+)
-        if (versionJson.has("arguments")) {
-            JSONObject argsObj = versionJson.getJSONObject("arguments");
-            if (argsObj.has("jvm")) {
-                parseArgumentsArray(argsObj.getJSONArray("jvm"), tokens, rawCmd, true, detectedMajor);
-            } else {
-                rawCmd.add("-cp");
-                rawCmd.add(classpath);
-            }
-
-            String mainClass = versionJson.optString("mainClass", "net.minecraft.client.main.Main");
-            rawCmd.add(mainClass);
-
-            if (argsObj.has("game")) {
-                parseArgumentsArray(argsObj.getJSONArray("game"), tokens, rawCmd, false, detectedMajor);
-            }
-        } else {
-            // Legacy arguments (1.12.2 and older)
-            rawCmd.add("-cp");
-            rawCmd.add(classpath);
-
-            String mainClass = versionJson.optString("mainClass", "net.minecraft.client.main.Main");
-            rawCmd.add(mainClass);
-
-            if (versionJson.has("minecraftArguments")) {
-                String mcArgs = versionJson.getString("minecraftArguments");
-                for (String part : mcArgs.split("\\s+")) {
-                    rawCmd.add(substitute(part, tokens));
-                }
-            }
-        }
-
-        // Window size arguments
-        if (config.getGameWidth() > 0 && config.getGameHeight() > 0) {
-            if (!rawCmd.contains("--width")) {
-                rawCmd.add("--width");
-                rawCmd.add(String.valueOf(config.getGameWidth()));
-            }
-            if (!rawCmd.contains("--height")) {
-                rawCmd.add("--height");
-                rawCmd.add(String.valueOf(config.getGameHeight()));
-            }
-        }
-        if (config.isFullscreen() && !rawCmd.contains("--fullscreen")) {
-            rawCmd.add("--fullscreen");
-        }
-
-        // Apply Launch Wrapper if specified (e.g. gamemoderun, mangohud, or custom script)
-        List<String> finalCmd = new ArrayList<>();
-        if (config.getLaunchWrapper() != null && !config.getLaunchWrapper().trim().isEmpty()) {
-            for (String w : config.getLaunchWrapper().trim().split("\\s+")) {
-                if (!w.isEmpty()) finalCmd.add(w);
-            }
-        }
-        finalCmd.addAll(rawCmd);
+        List<String> finalCmd = buildLaunchCommand(instance, account, config, versionJson,
+                sharedLibs, sharedAssets, nativesDir, classpath, javaExe, detectedMajor);
 
         if (statusCallback != null) statusCallback.accept("Starting Minecraft process...");
         if (logCallback != null) {
@@ -742,12 +640,220 @@ public class MinecraftLauncher {
         }
     }
 
+    public static List<String> buildLaunchCommand(Instance instance, Account account, LauncherConfig config,
+                                                  JSONObject versionJson, Path sharedLibs, Path sharedAssets,
+                                                  Path nativesDir, String classpath, String javaExe, int detectedMajor) {
+
+        int maxMemory = (instance.getCustomMemoryMb() != null && instance.getCustomMemoryMb() > 0)
+                ? instance.getCustomMemoryMb()
+                : config.getMaxMemoryMb();
+        int minMemory = config.getMinMemoryMb();
+        if (minMemory > maxMemory) minMemory = maxMemory;
+
+        String safeNatives = toSafeClasspathEntry(nativesDir.toAbsolutePath().toString());
+        List<String> rawCmd = new ArrayList<>();
+        rawCmd.add(javaExe);
+
+        String customJvm = (instance.getCustomJvmArgs() != null) ? instance.getCustomJvmArgs().trim() : "";
+        boolean overrideJvm = instance.isOverrideJvmArgs() && !customJvm.isEmpty();
+
+        // Check if custom JVM arguments already specify -Xms, -Xmx, or -Djava.library.path
+        boolean hasCustomXms = overrideJvm && (customJvm.contains("-Xms") || customJvm.matches(".*-Xms\\S+.*"));
+        boolean hasCustomXmx = overrideJvm && (customJvm.contains("-Xmx") || customJvm.matches(".*-Xmx\\S+.*"));
+        boolean hasCustomLibPath = overrideJvm && customJvm.contains("-Djava.library.path=");
+
+        if (!hasCustomXms) rawCmd.add("-Xms" + minMemory + "M");
+        if (!hasCustomXmx) rawCmd.add("-Xmx" + maxMemory + "M");
+        if (!hasCustomLibPath) rawCmd.add("-Djava.library.path=" + safeNatives);
+
+        if (overrideJvm) {
+            // User chose to override base launcher JVM flags completely
+            for (String arg : customJvm.split("\\s+")) {
+                if (!arg.isEmpty()) rawCmd.add(arg);
+            }
+        } else {
+            // Launcher global default JVM args (e.g. G1GC flags)
+            String defaultJvm = (config != null && config.getJvmArgs() != null) ? config.getJvmArgs().trim() : "";
+            if (!defaultJvm.isEmpty()) {
+                for (String arg : defaultJvm.split("\\s+")) {
+                    if (!arg.isEmpty()) rawCmd.add(arg);
+                }
+            }
+            // Instance-specific custom JVM args (appended)
+            if (!customJvm.isEmpty()) {
+                for (String arg : customJvm.split("\\s+")) {
+                    if (!arg.isEmpty()) rawCmd.add(arg);
+                }
+            }
+        }
+
+        // For modern Java (16+), ensure reflective access to unnamed modules if not already added
+        if (detectedMajor >= 16) {
+            boolean hasInvokeOpen = false;
+            boolean hasJarOpen = false;
+            for (String c : rawCmd) {
+                if (c.contains("java.base/java.lang.invoke=ALL-UNNAMED")) hasInvokeOpen = true;
+                if (c.contains("java.base/java.util.jar=ALL-UNNAMED")) hasJarOpen = true;
+            }
+            if (!hasInvokeOpen) {
+                rawCmd.add("--add-opens");
+                rawCmd.add("java.base/java.lang.invoke=ALL-UNNAMED");
+            }
+            if (!hasJarOpen) {
+                rawCmd.add("--add-opens");
+                rawCmd.add("java.base/java.util.jar=ALL-UNNAMED");
+            }
+        }
+
+        Path assetsPath = sharedAssets;
+        if (versionJson.has("assetIndex")) {
+            JSONObject aIndex = versionJson.getJSONObject("assetIndex");
+            String idxId = aIndex.optString("id", "");
+            Path virt = sharedAssets.resolve("virtual").resolve(idxId);
+            if (Files.exists(virt)) {
+                assetsPath = virt;
+            }
+        }
+
+        Map<String, String> tokens = new HashMap<>();
+        tokens.put("natives_directory", safeNatives);
+        tokens.put("launcher_name", "IPOCraft");
+        tokens.put("launcher_version", "2.0");
+        tokens.put("classpath", classpath);
+        tokens.put("classpath_separator", File.pathSeparator);
+        tokens.put("library_directory", sharedLibs.toAbsolutePath().toString());
+        tokens.put("libraries_directory", sharedLibs.toAbsolutePath().toString());
+        tokens.put("auth_player_name", account.getUsername());
+        tokens.put("version_name", instance.getMinecraftVersion());
+        tokens.put("game_directory", instance.getGameDir().toAbsolutePath().toString());
+        tokens.put("assets_root", sharedAssets.toAbsolutePath().toString());
+        tokens.put("game_assets", assetsPath.toAbsolutePath().toString());
+        tokens.put("assets_index_name", versionJson.optJSONObject("assetIndex") != null
+                ? versionJson.getJSONObject("assetIndex").optString("id", instance.getMinecraftVersion())
+                : instance.getMinecraftVersion());
+        tokens.put("auth_uuid", account.getUuid().replace("-", ""));
+        tokens.put("auth_access_token", account.getAccessToken());
+        tokens.put("auth_session", account.getAuthSession());
+        tokens.put("user_type", account.isMicrosoft() ? "msa" : "mojang");
+        tokens.put("user_properties", "{}");
+        tokens.put("user_property_map", "{}");
+        tokens.put("profile_name", account.getUsername());
+        tokens.put("version_type", "release");
+        tokens.put("resolution_width", String.valueOf(config.getGameWidth()));
+        tokens.put("resolution_height", String.valueOf(config.getGameHeight()));
+        tokens.put("clientid", config.getMicrosoftClientId() != null ? config.getMicrosoftClientId() : "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb");
+        tokens.put("auth_xuid", account.getUuid().replace("-", ""));
+
+        // Modern arguments support (1.13+)
+        if (versionJson.has("arguments")) {
+            JSONObject argsObj = versionJson.getJSONObject("arguments");
+            if (argsObj.has("jvm")) {
+                parseArgumentsArray(argsObj.getJSONArray("jvm"), tokens, rawCmd, true, detectedMajor);
+            } else {
+                rawCmd.add("-cp");
+                rawCmd.add(classpath);
+            }
+
+            String mainClass = versionJson.optString("mainClass", "net.minecraft.client.main.Main");
+            rawCmd.add(mainClass);
+
+            if (argsObj.has("game")) {
+                parseArgumentsArray(argsObj.getJSONArray("game"), tokens, rawCmd, false, detectedMajor);
+            }
+        } else {
+            // Legacy arguments (1.12.2 and older)
+            rawCmd.add("-cp");
+            rawCmd.add(classpath);
+
+            String mainClass = versionJson.optString("mainClass", "net.minecraft.client.main.Main");
+            rawCmd.add(mainClass);
+
+            if (versionJson.has("minecraftArguments")) {
+                String mcArgs = versionJson.getString("minecraftArguments");
+                for (String part : mcArgs.split("\\s+")) {
+                    rawCmd.add(substitute(part, tokens));
+                }
+            }
+        }
+
+        // Custom game arguments specified for the instance
+        if (instance.getCustomGameArgs() != null && !instance.getCustomGameArgs().trim().isEmpty()) {
+            for (String gArg : instance.getCustomGameArgs().trim().split("\\s+")) {
+                if (!gArg.isEmpty()) {
+                    rawCmd.add(substitute(gArg, tokens));
+                }
+            }
+        }
+
+        // Window size arguments
+        if (config.getGameWidth() > 0 && config.getGameHeight() > 0) {
+            if (!rawCmd.contains("--width")) {
+                rawCmd.add("--width");
+                rawCmd.add(String.valueOf(config.getGameWidth()));
+            }
+            if (!rawCmd.contains("--height")) {
+                rawCmd.add("--height");
+                rawCmd.add(String.valueOf(config.getGameHeight()));
+            }
+        }
+        if (config.isFullscreen() && !rawCmd.contains("--fullscreen")) {
+            rawCmd.add("--fullscreen");
+        }
+
+        // Apply Launch Wrapper if specified (e.g. gamemoderun, mangohud, or custom script)
+        List<String> finalCmd = new ArrayList<>();
+        if (config.getLaunchWrapper() != null && !config.getLaunchWrapper().trim().isEmpty()) {
+            for (String w : config.getLaunchWrapper().trim().split("\\s+")) {
+                if (!w.isEmpty()) finalCmd.add(w);
+            }
+        }
+        finalCmd.addAll(rawCmd);
+        return finalCmd;
+    }
+
+    public static List<String> previewLaunchCommand(Instance instance, Account account) throws Exception {
+        if (instance == null) return Collections.emptyList();
+        LauncherConfig config = ConfigManager.getInstance().getConfig();
+        Path sharedLibs = config.resolveLibrariesPath();
+        Path sharedAssets = config.resolveAssetsPath();
+        Path sharedVersions = config.resolveVersionsPath();
+        JSONObject versionJson = resolveVersionJson(instance, sharedVersions);
+        if (versionJson == null) {
+            return Collections.singletonList("Version JSON not found for " + instance.getMinecraftVersion());
+        }
+        Path nativesDir = instance.getBaseDirectory().resolve("natives");
+        Set<String> classpathEntries = new LinkedHashSet<>();
+        collectClasspathLibraries(versionJson, sharedLibs, classpathEntries);
+        Path clientJar = ensureClientJar(instance.getMinecraftVersion(), versionJson, sharedVersions);
+        if (clientJar != null && Files.exists(clientJar)) {
+            classpathEntries.add(clientJar.toAbsolutePath().toString());
+        }
+        Set<String> safeClasspathEntries = new LinkedHashSet<>();
+        for (String entry : classpathEntries) {
+            safeClasspathEntries.add(toSafeClasspathEntry(entry));
+        }
+        String classpath = String.join(File.pathSeparator, safeClasspathEntries);
+        String javaExe = resolveJavaPath(instance, config);
+        JavaDetector.JavaInfo detectedJava = JavaDetector.inspectJava(Paths.get(javaExe));
+        int detectedMajor = detectedJava != null ? detectedJava.getMajorVersion() : 0;
+        Account acc = (account != null) ? account : Account.createOffline("Player");
+        return buildLaunchCommand(instance, acc, config, versionJson, sharedLibs, sharedAssets, nativesDir, classpath, javaExe, detectedMajor);
+    }
+
     private static void parseArgumentsArray(JSONArray array, Map<String, String> tokens, List<String> cmd, boolean isJvm, int javaMajor) {
         for (int i = 0; i < array.length(); i++) {
             Object item = array.get(i);
             if (item instanceof String) {
                 String val = substitute((String) item, tokens);
                 if (!val.isEmpty() && !val.matches("^\\$\\{[a-zA-Z0-9_]+\\}$")) {
+                    if (isJvm && val.contains(File.pathSeparator)) {
+                        String[] parts = val.split(java.util.regex.Pattern.quote(File.pathSeparator));
+                        List<String> safeParts = new ArrayList<>();
+                        for (String p : parts) {
+                            safeParts.add(toSafeClasspathEntry(p));
+                        }
+                        val = String.join(File.pathSeparator, safeParts);
+                    }
                     if (!isJvm || isJvmArgCompatibleWithJava(val, javaMajor)) {
                         cmd.add(val);
                     }
@@ -763,6 +869,14 @@ public class MinecraftLauncher {
                     if (valObj instanceof String) {
                         String val = substitute((String) valObj, tokens);
                         if (!val.isEmpty() && !val.matches("^\\$\\{[a-zA-Z0-9_]+\\}$")) {
+                            if (isJvm && val.contains(File.pathSeparator)) {
+                                String[] parts = val.split(java.util.regex.Pattern.quote(File.pathSeparator));
+                                List<String> safeParts = new ArrayList<>();
+                                for (String p : parts) {
+                                    safeParts.add(toSafeClasspathEntry(p));
+                                }
+                                val = String.join(File.pathSeparator, safeParts);
+                            }
                             if (!isJvm || isJvmArgCompatibleWithJava(val, javaMajor)) {
                                 cmd.add(val);
                             }
@@ -772,6 +886,14 @@ public class MinecraftLauncher {
                         for (int j = 0; j < valArr.length(); j++) {
                             String val = substitute(valArr.getString(j), tokens);
                             if (!val.isEmpty() && !val.matches("^\\$\\{[a-zA-Z0-9_]+\\}$")) {
+                                if (isJvm && val.contains(File.pathSeparator)) {
+                                    String[] parts = val.split(java.util.regex.Pattern.quote(File.pathSeparator));
+                                    List<String> safeParts = new ArrayList<>();
+                                    for (String p : parts) {
+                                        safeParts.add(toSafeClasspathEntry(p));
+                                    }
+                                    val = String.join(File.pathSeparator, safeParts);
+                                }
                                 if (!isJvm || isJvmArgCompatibleWithJava(val, javaMajor)) {
                                     cmd.add(val);
                                 }
@@ -1008,5 +1130,97 @@ public class MinecraftLauncher {
         }
 
         return pathStr;
+    }
+
+    public static void syncForgeAndSystemLibraries(Path sharedLibs, Consumer<String> logCallback) {
+        try {
+            Path sysLibs = VersionScanner.getSystemMinecraftLibrariesDir();
+            Path legacyLibs = Paths.get(System.getProperty("user.home"), "IPOCraft", ".minecraft", "libraries");
+
+            List<Path> sources = new ArrayList<>();
+            if (sysLibs != null && Files.exists(sysLibs) && !sysLibs.toAbsolutePath().normalize().equals(sharedLibs.toAbsolutePath().normalize())) {
+                sources.add(sysLibs);
+            }
+            if (Files.exists(legacyLibs) && !legacyLibs.toAbsolutePath().normalize().equals(sharedLibs.toAbsolutePath().normalize())) {
+                sources.add(legacyLibs);
+            }
+
+            for (Path src : sources) {
+                // 1. Sync net/minecraft/client (Forge remapped/extra/srg jars)
+                Path srcClient = src.resolve("net").resolve("minecraft").resolve("client");
+                if (Files.exists(srcClient)) {
+                    copyDirectoryTreeIfNotExists(srcClient, sharedLibs.resolve("net").resolve("minecraft").resolve("client"));
+                }
+
+                // 2. Sync net/minecraftforge (Forge client patches, fmlloader, universal jars)
+                Path srcForge = src.resolve("net").resolve("minecraftforge");
+                if (Files.exists(srcForge)) {
+                    copyDirectoryTreeIfNotExists(srcForge, sharedLibs.resolve("net").resolve("minecraftforge"));
+                }
+            }
+        } catch (Exception e) {
+            if (logCallback != null) {
+                logCallback.accept("[WARN] Error syncing system libraries: " + e.getMessage());
+            }
+        }
+    }
+
+    private static void copyDirectoryTreeIfNotExists(Path source, Path target) {
+        try {
+            if (!Files.exists(source)) return;
+            Files.walkFileTree(source, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    Path rel = source.relativize(dir);
+                    Path destDir = target.resolve(rel);
+                    if (!Files.exists(destDir)) {
+                        Files.createDirectories(destDir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Path rel = source.relativize(file);
+                    Path destFile = target.resolve(rel);
+                    if (!Files.exists(destFile) || Files.size(destFile) != Files.size(file)) {
+                        Files.createDirectories(destFile.getParent());
+                        Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private static void verifyForgeLibraries(JSONObject versionJson, Path sharedLibs, Consumer<String> logCallback) {
+        try {
+            String mcVer = null;
+            String mcpVer = null;
+            String forgeVer = null;
+
+            if (versionJson != null && versionJson.has("arguments") && versionJson.getJSONObject("arguments").has("game")) {
+                JSONArray gameArgs = versionJson.getJSONObject("arguments").getJSONArray("game");
+                for (int i = 0; i < gameArgs.length() - 1; i++) {
+                    Object item = gameArgs.get(i);
+                    if (item instanceof String) {
+                        String s = (String) item;
+                        if (s.equals("--fml.mcVersion")) mcVer = gameArgs.getString(i + 1);
+                        else if (s.equals("--fml.mcpVersion")) mcpVer = gameArgs.getString(i + 1);
+                        else if (s.equals("--fml.forgeVersion")) forgeVer = gameArgs.getString(i + 1);
+                    }
+                }
+            }
+
+            if (mcVer != null && mcpVer != null) {
+                Path srgJar = sharedLibs.resolve("net/minecraft/client/" + mcVer + "-" + mcpVer + "/client-" + mcVer + "-" + mcpVer + "-srg.jar");
+                if (!Files.exists(srgJar)) {
+                    if (logCallback != null) {
+                        logCallback.accept("[ERROR] Missing required Forge library: " + srgJar.getFileName() +
+                                ". Please make sure Forge " + (forgeVer != null ? forgeVer : "") + " is installed via the official Forge installer.");
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
     }
 }

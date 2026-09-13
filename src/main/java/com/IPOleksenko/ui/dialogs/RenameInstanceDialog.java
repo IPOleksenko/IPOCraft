@@ -21,6 +21,7 @@ public class RenameInstanceDialog {
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Rename Instance");
         stage.setResizable(false);
+        com.IPOleksenko.ui.UIUtils.applyWindowIcon(stage);
 
         VBox root = new VBox(14);
         root.setPadding(new Insets(20));

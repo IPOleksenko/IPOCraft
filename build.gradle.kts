@@ -42,6 +42,10 @@ application {
     mainClass.set("com.IPOleksenko.Launcher")
 }
 
+tasks.jar {
+    enabled = false
+}
+
 tasks.withType<ShadowJar> {
     archiveBaseName.set("IPOCraft")
     archiveClassifier.set("")

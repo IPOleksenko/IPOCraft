@@ -164,7 +164,18 @@ public class MicrosoftAuthService {
         JSONObject mcLoginReq = new JSONObject();
         mcLoginReq.put("identityToken", "XBL3.0 x=" + uhs + ";" + xstsToken);
 
-        String mcLoginResp = postJson(new URL("https://api.minecraftservices.com/authentication/login_with_xbox"), mcLoginReq.toString());
+        String mcLoginResp;
+        try {
+            mcLoginResp = postJson(new URL("https://api.minecraftservices.com/authentication/login_with_xbox"), mcLoginReq.toString());
+        } catch (IOException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Invalid app registration")) {
+                throw new IOException("Mojang rejected the Azure Client ID (Invalid app registration).\n" +
+                        "Please choose an approved preset in Launcher Settings -> Microsoft Azure Client ID,\n" +
+                        "or submit your custom Azure App for review at https://aka.ms/mce-reviewappid.");
+            }
+            throw e;
+        }
         JSONObject mcLoginJson = new JSONObject(mcLoginResp);
         String mcAccessToken = mcLoginJson.getString("access_token");
         long expiresInSec = mcLoginJson.optLong("expires_in", 86400);
@@ -259,6 +270,11 @@ public class MicrosoftAuthService {
                 } catch (IOException ioe) {
                     throw ioe;
                 } catch (Exception ignored) {}
+            }
+            if (code == 403 && resp.contains("Invalid app registration")) {
+                throw new IOException("HTTP 403: Invalid app registration (" + getClientId() + ").\n"
+                        + "Mojang requires custom Azure Client IDs to be submitted for approval via https://aka.ms/mce-reviewappid.\n"
+                        + "Ensure your app is approved by Mojang and 'Allow public client flows' is enabled in Azure Portal.");
             }
             throw new IOException("HTTP " + code + ": " + resp);
         }

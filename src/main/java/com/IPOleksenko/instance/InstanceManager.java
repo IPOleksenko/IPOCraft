@@ -186,6 +186,10 @@ public class InstanceManager {
     }
 
     public void updateInstance(Instance inst, String newName, String newVersion, String javaPath, Integer ramMb) {
+        updateInstance(inst, newName, newVersion, javaPath, ramMb, null, null, null);
+    }
+
+    public void updateInstance(Instance inst, String newName, String newVersion, String javaPath, Integer ramMb, String jvmArgs, String gameArgs, Boolean overrideJvmArgs) {
         if (inst == null) return;
         if (newName != null && !newName.trim().isEmpty()) {
             inst.setName(newName.trim());
@@ -195,6 +199,15 @@ public class InstanceManager {
         }
         inst.setCustomJavaPath(javaPath != null ? javaPath.trim() : "");
         inst.setCustomMemoryMb(ramMb);
+        if (jvmArgs != null) {
+            inst.setCustomJvmArgs(jvmArgs.trim());
+        }
+        if (gameArgs != null) {
+            inst.setCustomGameArgs(gameArgs.trim());
+        }
+        if (overrideJvmArgs != null) {
+            inst.setOverrideJvmArgs(overrideJvmArgs);
+        }
         saveInstances();
     }
 

@@ -19,10 +19,16 @@ import com.IPOleksenko.launcher.VersionScanner;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Consumer;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Rectangle;
+import javafx.stage.FileChooser;
+import com.IPOleksenko.ui.UIUtils;
 
 public class EditInstanceDialog {
 
@@ -34,6 +40,7 @@ public class EditInstanceDialog {
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Edit Instance & Update Version");
         stage.setResizable(false);
+        UIUtils.applyWindowIcon(stage);
 
         VBox root = new VBox(14);
         root.setPadding(new Insets(20));
@@ -45,9 +52,60 @@ public class EditInstanceDialog {
         title.setStyle("-fx-font-size: 18px; -fx-text-fill: #ffffff;");
 
         // 1. Instance Name
-        Label nameLabel = new Label("Instance Name:");
+        Label nameLabel = new Label("Instance Name / Название версии:");
         nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         TextField nameField = new TextField(instance.getName());
+
+        // Custom Icon for Instance
+        Label iconLabel = new Label("Instance Icon (Custom Icon / Своя иконка):");
+        iconLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+
+        final String[] customIconHolder = new String[]{instance.getIcon()};
+        ImageView iconPreview = new ImageView();
+        iconPreview.setFitWidth(36);
+        iconPreview.setFitHeight(36);
+        iconPreview.setPreserveRatio(false);
+        Rectangle iconClip = new Rectangle(36, 36);
+        iconClip.setArcWidth(8);
+        iconClip.setArcHeight(8);
+        iconPreview.setClip(iconClip);
+
+        Image currentImg = UIUtils.loadImage(instance.getIcon());
+        if (currentImg == null || currentImg.isError()) {
+            currentImg = UIUtils.loadImage("/assets/icon.png");
+        }
+        if (currentImg != null) iconPreview.setImage(currentImg);
+
+        Button chooseIconBtn = new Button("Browse Custom Icon...");
+        chooseIconBtn.getStyleClass().add("btn-secondary");
+
+        Button resetIconBtn = new Button("Reset to Default");
+        resetIconBtn.getStyleClass().add("btn-secondary");
+
+        chooseIconBtn.setOnAction(e -> {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Select Instance Icon");
+            fc.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Image Files (*.png, *.jpg, *.jpeg)", "*.png", "*.jpg", "*.jpeg")
+            );
+            File file = fc.showOpenDialog(stage);
+            if (file != null && file.exists()) {
+                customIconHolder[0] = file.getAbsolutePath();
+                Image img = new Image(file.toURI().toString());
+                if (!img.isError()) {
+                    iconPreview.setImage(img);
+                }
+            }
+        });
+
+        resetIconBtn.setOnAction(e -> {
+            customIconHolder[0] = "grass";
+            Image img = UIUtils.loadImage("/assets/icon.png");
+            if (img != null) iconPreview.setImage(img);
+        });
+
+        HBox iconBox = new HBox(10, iconPreview, chooseIconBtn, resetIconBtn);
+        iconBox.setAlignment(Pos.CENTER_LEFT);
 
         // 2. Version Selection
         Label verLabel = new Label("Minecraft Version (Change/Update version):");
@@ -85,7 +143,11 @@ public class EditInstanceDialog {
 
         FlowPane filterBox = new FlowPane(10, 8, cbReleases, cbSnapshots, cbOldBeta, cbOldAlpha, cbCustom);
 
+        Label searchLabel = new Label("Search Version / Поиск версии:");
+        searchLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+
         TextField searchField = new TextField();
+        searchField.setPromptText("Type version to search...");
 
         ComboBox<String> versionCombo = new ComboBox<>();
         versionCombo.setMaxWidth(Double.MAX_VALUE);
@@ -153,17 +215,14 @@ public class EditInstanceDialog {
         Label ramLabel = new Label("Memory Allocation (RAM):");
         ramLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
         ComboBox<String> ramCombo = new ComboBox<>();
-        ramCombo.getItems().addAll(
-                "Default (from launcher settings)",
-                "2048 MB (2 GB)",
-                "3072 MB (3 GB)",
-                "4096 MB (4 GB)",
-                "6144 MB (6 GB)",
-                "8192 MB (8 GB)",
-                "12288 MB (12 GB)"
-        );
+        ramCombo.getItems().setAll(UIUtils.getRamPresets());
+        ramCombo.setEditable(true);
+        ramCombo.setMaxWidth(Double.MAX_VALUE);
+        ramCombo.setPromptText("Select preset or type any RAM (e.g. 8192, 16 GB)...");
+
         if (instance.getCustomMemoryMb() != null && instance.getCustomMemoryMb() > 0) {
-            String target = instance.getCustomMemoryMb() + " MB";
+            int mem = instance.getCustomMemoryMb();
+            String target = mem + " MB";
             boolean found = false;
             for (String r : ramCombo.getItems()) {
                 if (r.startsWith(target)) {
@@ -172,11 +231,73 @@ public class EditInstanceDialog {
                     break;
                 }
             }
-            if (!found) ramCombo.setValue(instance.getCustomMemoryMb() + " MB");
+            if (!found) {
+                double gb = mem / 1024.0;
+                ramCombo.setValue(mem + " MB (" + String.format(java.util.Locale.ROOT, "%.1f", gb) + " GB)");
+            }
         } else {
             ramCombo.setValue("Default (from launcher settings)");
         }
-        ramCombo.setMaxWidth(Double.MAX_VALUE);
+
+        // 5. JVM Arguments
+        Label jvmLabel = new Label("Custom JVM Arguments:");
+        jvmLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+        TextArea jvmArgsArea = new TextArea(instance.getCustomJvmArgs() != null ? instance.getCustomJvmArgs() : "");
+        jvmArgsArea.setPrefRowCount(3);
+        jvmArgsArea.setWrapText(true);
+        jvmArgsArea.setPromptText("-XX:+UseG1GC ...");
+
+        CheckBox overrideJvmCheck = new CheckBox("Override launcher default JVM flags (completely replace instead of append)");
+        overrideJvmCheck.setSelected(instance.isOverrideJvmArgs());
+        overrideJvmCheck.setStyle("-fx-text-fill: #cbd5e1; -fx-font-size: 12px;");
+
+        Button copyDefaultJvmBtn = new Button("Load Default JVM Flags into Editor");
+        copyDefaultJvmBtn.getStyleClass().add("btn-secondary");
+        copyDefaultJvmBtn.setOnAction(e -> {
+            jvmArgsArea.setText(com.IPOleksenko.config.ConfigManager.getInstance().getConfig().getJvmArgs());
+            overrideJvmCheck.setSelected(true);
+        });
+
+        HBox jvmOptsBox = new HBox(12, overrideJvmCheck, copyDefaultJvmBtn);
+        jvmOptsBox.setAlignment(Pos.CENTER_LEFT);
+
+        // 6. Custom Game / Minecraft Arguments
+        Label gameArgsLabel = new Label("Custom Game / Minecraft Arguments (optional):");
+        gameArgsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff;");
+        TextField gameArgsField = new TextField(instance.getCustomGameArgs() != null ? instance.getCustomGameArgs() : "");
+        gameArgsField.setPromptText("--quickPlayMultiplayer=... --demo");
+
+        // 7. Preview Command Button
+        Button previewCmdBtn = new Button("Preview Launch Command");
+        previewCmdBtn.getStyleClass().add("btn-secondary");
+        previewCmdBtn.setOnAction(e -> {
+            try {
+                Instance temp = new Instance(nameField.getText().trim(), CreateInstanceDialog.cleanVersionId(versionCombo.getValue()));
+                temp.setId(instance.getId());
+                temp.setCustomJavaPath(instance.getCustomJavaPath());
+                String selJava = javaCombo.getValue();
+                if (selJava != null && !selJava.startsWith("Auto")) {
+                    int bracket = selJava.indexOf('[');
+                    temp.setCustomJavaPath((bracket != -1 ? selJava.substring(0, bracket).trim() : selJava).trim());
+                }
+                String selRam = ramCombo.getValue();
+                if (selRam != null && !selRam.startsWith("Default")) {
+                    try {
+                        temp.setCustomMemoryMb(Integer.parseInt(selRam.split(" ")[0]));
+                    } catch (Exception ignored) {}
+                }
+                temp.setCustomJvmArgs(jvmArgsArea.getText());
+                temp.setCustomGameArgs(gameArgsField.getText());
+                temp.setOverrideJvmArgs(overrideJvmCheck.isSelected());
+
+                List<String> cmd = com.IPOleksenko.launcher.MinecraftLauncher.previewLaunchCommand(temp, com.IPOleksenko.auth.AccountManager.getInstance().getActiveAccount());
+                showPreviewDialog(stage, cmd);
+            } catch (Exception ex) {
+                Alert err = new Alert(Alert.AlertType.ERROR, "Failed to preview launch command:\n" + ex.getMessage(), ButtonType.OK);
+                err.initOwner(stage);
+                err.show();
+            }
+        });
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
@@ -189,15 +310,19 @@ public class EditInstanceDialog {
         cancelBtn.getStyleClass().add("btn-secondary");
         cancelBtn.setOnAction(e -> stage.close());
 
-        HBox buttons = new HBox(10, cancelBtn, saveBtn);
+        HBox buttons = new HBox(10, previewCmdBtn, new Region(), cancelBtn, saveBtn);
+        HBox.setHgrow(buttons.getChildren().get(1), Priority.ALWAYS);
         buttons.setAlignment(Pos.CENTER_RIGHT);
 
         root.getChildren().addAll(
                 title,
                 nameLabel, nameField,
-                verHeader, filterBox, searchField, versionCombo,
+                iconLabel, iconBox,
+                verHeader, filterBox, searchLabel, searchField, versionCombo,
                 javaLabel, javaCombo,
                 ramLabel, ramCombo,
+                jvmLabel, jvmArgsArea, jvmOptsBox,
+                gameArgsLabel, gameArgsField,
                 statusLabel,
                 buttons
         );
@@ -391,20 +516,71 @@ public class EditInstanceDialog {
             }
 
             // RAM selection
-            Integer customRam = null;
-            String selRam = ramCombo.getValue();
-            if (selRam != null && !selRam.startsWith("Default")) {
-                try {
-                    customRam = Integer.parseInt(selRam.split(" ")[0]);
-                } catch (Exception ignored) {}
+            Integer customRam = UIUtils.parseRamMb(ramCombo.getValue());
+
+            if (customIconHolder[0] != null) {
+                instance.setIcon(customIconHolder[0]);
             }
 
-            InstanceManager.getInstance().updateInstance(instance, name, verId, customJava, customRam);
+            InstanceManager.getInstance().updateInstance(
+                    instance, name, verId, customJava, customRam,
+                    jvmArgsArea.getText(), gameArgsField.getText(), overrideJvmCheck.isSelected()
+            );
             if (onSuccess != null) onSuccess.run();
             stage.close();
         });
 
-        Scene scene = new Scene(root);
+        ScrollPane scrollPane = new ScrollPane(root);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background-color: #161922; -fx-background: #161922;");
+
+        Scene scene = new Scene(scrollPane, 590, 680);
+        scene.getStylesheets().add(EditInstanceDialog.class.getResource("/assets/style.css").toExternalForm());
+        stage.setScene(scene);
+        stage.showAndWait();
+    }
+
+    private static void showPreviewDialog(Stage parentStage, List<String> cmd) {
+        Stage stage = new Stage();
+        stage.initOwner(parentStage);
+        stage.initModality(Modality.APPLICATION_MODAL);
+        stage.setTitle("Preview Launch Command");
+        stage.setResizable(true);
+        UIUtils.applyWindowIcon(stage);
+
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(16));
+        root.setStyle("-fx-background-color: #161922;");
+
+        Label title = new Label("Full Launch Command Preview:");
+        title.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffffff; -fx-font-size: 14px;");
+
+        TextArea cmdArea = new TextArea(String.join(" ", cmd));
+        cmdArea.setWrapText(true);
+        cmdArea.setEditable(false);
+        cmdArea.setStyle("-fx-font-family: Consolas, monospace; -fx-font-size: 12px;");
+        VBox.setVgrow(cmdArea, Priority.ALWAYS);
+
+        Button copyBtn = new Button("Copy to Clipboard");
+        copyBtn.getStyleClass().add("btn-primary");
+        copyBtn.setOnAction(e -> {
+            javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+            javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+            content.putString(String.join(" ", cmd));
+            clipboard.setContent(content);
+            copyBtn.setText("Copied!");
+        });
+
+        Button closeBtn = new Button("Close");
+        closeBtn.getStyleClass().add("btn-secondary");
+        closeBtn.setOnAction(e -> stage.close());
+
+        HBox btnBox = new HBox(10, copyBtn, closeBtn);
+        btnBox.setAlignment(Pos.CENTER_RIGHT);
+
+        root.getChildren().addAll(title, cmdArea, btnBox);
+
+        Scene scene = new Scene(root, 650, 420);
         scene.getStylesheets().add(EditInstanceDialog.class.getResource("/assets/style.css").toExternalForm());
         stage.setScene(scene);
         stage.showAndWait();

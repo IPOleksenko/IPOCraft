@@ -44,9 +44,6 @@ public class ConfigManager {
         if (config == null) {
             config = new LauncherConfig();
             saveConfig();
-        } else if ("c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb".equalsIgnoreCase(config.getMicrosoftClientId())) {
-            config.setMicrosoftClientId("43b56eb6-cbec-4278-9c39-d70c21aa6d49");
-            saveConfig();
         }
         ensureLauncherProfiles();
     }

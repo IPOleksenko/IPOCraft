@@ -35,8 +35,8 @@ public class LauncherConfig {
     private String activeInstanceId = "";
     private String activeUserUuid = "";
 
-    // Microsoft Azure Application ID for OAuth2 Device Flow
-    private String microsoftClientId = "43b56eb6-cbec-4278-9c39-d70c21aa6d49";
+    // Microsoft Azure Application ID for OAuth2 Device Flow (Prism Launcher approved ID by default)
+    private String microsoftClientId = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 
     public LauncherConfig() {}
 

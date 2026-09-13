@@ -12,6 +12,7 @@ public class Account {
     private String refreshToken;
     private long expiresAt;
     private String skinUrl;
+    private String customIconPath;
 
     public Account() {
         this.type = "OFFLINE";
@@ -115,6 +116,14 @@ public class Account {
 
     public void setSkinUrl(String skinUrl) {
         this.skinUrl = skinUrl;
+    }
+
+    public String getCustomIconPath() {
+        return customIconPath;
+    }
+
+    public void setCustomIconPath(String customIconPath) {
+        this.customIconPath = customIconPath;
     }
 
     @Override
